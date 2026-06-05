@@ -6,6 +6,8 @@ node_modules/
 extension/out/
 *.log
 
-# Test workspace build outputs
+# Test workspace build outputs (keep the folder, ignore artifacts)
+test-workspace/build/*
+!test-workspace/build/.gitkeep
 test-workspace/*.exe
 test-workspace/*.o
