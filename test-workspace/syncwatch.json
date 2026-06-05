@@ -1,0 +1,27 @@
+{
+  "threads": {
+    "mode": "linked_list",
+    "root": "g_kernel.pools[0]->thread_list",
+    "next": "next",
+    "fields": [
+      { "label": "ID",          "expr": "id" },
+      { "label": "Name",        "expr": "name" },
+      { "label": "State",       "expr": "state" },
+      { "label": "Priority",    "expr": "prio" },
+      { "label": "Stack Start", "expr": "stack_base" },
+      { "label": "Stack Size",  "expr": "stack_size" }
+    ]
+  },
+  "semaphores": {
+    "mode": "linked_list",
+    "root": "g_kernel.pools[0]->sem_list",
+    "next": "next",
+    "fields": [
+      { "label": "ID",         "expr": "id" },
+      { "label": "Count",      "expr": "count" },
+      { "label": "Max",        "expr": "max_count" },
+      { "label": "Waiting",    "expr": "waiting" },
+      { "label": "Discipline", "expr": "discipline" }
+    ]
+  }
+}

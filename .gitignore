@@ -1,0 +1,11 @@
+# Local portable toolchain downloaded for building (not part of the project)
+.tools/
+
+# Node / build artifacts
+node_modules/
+extension/out/
+*.log
+
+# Test workspace build outputs
+test-workspace/*.exe
+test-workspace/*.o

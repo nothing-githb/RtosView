@@ -1,0 +1,85 @@
+{
+  "name": "syncwatch",
+  "displayName": "SyncWatch",
+  "description": "Inspect your own custom thread and semaphore structures while debugging C with GDB. Config-driven, read-only, shown in a tabbed Webview panel.",
+  "version": "0.1.0",
+  "publisher": "HALISTAHASAHIN",
+  "license": "MIT",
+  "icon": "icon.png",
+  "author": {
+    "name": "Halis"
+  },
+  "homepage": "https://github.com/nothing-githb/RtosView#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nothing-githb/RtosView.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nothing-githb/RtosView/issues"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Visualization"
+  ],
+  "keywords": [
+    "gdb",
+    "cppdbg",
+    "debug",
+    "rtos",
+    "thread",
+    "semaphore",
+    "embedded",
+    "scheduler"
+  ],
+  "galleryBanner": {
+    "color": "#1E212C",
+    "theme": "dark"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onDebug"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "syncwatch.open",
+        "title": "SyncWatch: Open Panel"
+      }
+    ],
+    "configuration": {
+      "title": "SyncWatch",
+      "properties": {
+        "syncwatch.configPath": {
+          "type": "string",
+          "default": "syncwatch.json",
+          "description": "Path to the config file, relative to the workspace root."
+        },
+        "syncwatch.debugTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "cppdbg"
+          ],
+          "description": "Debug adapter types the tracker attaches to. Use 'cppdbg' for GDB."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.4.0"
+  }
+}
