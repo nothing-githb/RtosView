@@ -22,6 +22,11 @@ extension knows nothing about your structs.
   valid works: `head`, `g_sys.thread_list`, `g_kernel.pools[0]->thread_list`.
 - **Live updates.** The panel refreshes every time execution stops and shows a
   "running…" badge while the program runs.
+- **Sortable columns.** Click any column header to sort (numeric/hex columns
+  sort numerically, text alphabetically); the choice persists across stops.
+- **Refresh on demand or on change.** A **Refresh** button re-reads
+  `syncwatch.json` without restarting the debugger, and the panel also refreshes
+  automatically when the config file changes on disk (while stopped).
 - **Read-only & safe.** SyncWatch only *reads* globals — it never calls
   functions, so your program state is never disturbed.
 - **Readable UI.** Thread `State` becomes a colored badge

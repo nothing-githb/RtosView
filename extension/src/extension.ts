@@ -28,6 +28,7 @@ interface Section { columns: string[]; rows: Row[]; summary: string; kind: strin
 // ---------------------------------------------------------------------------
 let panel: vscode.WebviewPanel | undefined;
 let lastStopped: { session: vscode.DebugSession; threadId: number } | undefined;
+let configWatcher: vscode.FileSystemWatcher | undefined;
 
 // ---------------------------------------------------------------------------
 // Aktivasyon
@@ -63,9 +64,39 @@ export function activate(context: vscode.ExtensionContext) {
       })
     );
   }
+
+  // config dosyası değişince (debugger durmuşsa ve panel açıksa) otomatik yenile
+  setupConfigWatcher(context);
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('syncwatch.configPath')) setupConfigWatcher(context);
+    })
+  );
 }
 
 export function deactivate() {}
+
+// configPath ayarına göre config dosyasını izle; değişince paneli tazele
+function setupConfigWatcher(context: vscode.ExtensionContext) {
+  configWatcher?.dispose();
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) return;
+  const rel: string =
+    vscode.workspace.getConfiguration('syncwatch').get('configPath') ?? 'syncwatch.json';
+  configWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(folder, rel)
+  );
+  const onChange = () => {
+    if (panel && lastStopped) refresh(lastStopped.session, lastStopped.threadId);
+  };
+  configWatcher.onDidChange(onChange);
+  configWatcher.onDidCreate(onChange);
+  context.subscriptions.push(configWatcher);
+}
+
+function doRefresh() {
+  if (lastStopped) refresh(lastStopped.session, lastStopped.threadId);
+}
 
 // ---------------------------------------------------------------------------
 // GDB ile konuşma
@@ -231,6 +262,11 @@ function openPanel(context: vscode.ExtensionContext) {
     { enableScripts: true, retainContextWhenHidden: true }
   );
   panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
+  panel.webview.onDidReceiveMessage(
+    (msg: any) => { if (msg?.type === 'refresh') doRefresh(); },
+    null,
+    context.subscriptions
+  );
   panel.webview.html = getHtml();
 }
 
@@ -263,6 +299,14 @@ function getHtml(): string {
   }
   .pill.run { background: rgba(241,196,15,0.20); color: #f1c40f; }
   .ts { font-size: 11px; opacity: 0.6; }
+  .btn {
+    appearance: none; cursor: pointer; font-family: inherit; font-size: 11px;
+    padding: 4px 10px; border-radius: 6px;
+    border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3));
+    background: var(--vscode-button-secondaryBackground, transparent);
+    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  }
+  .btn:hover { background: var(--vscode-list-hoverBackground); }
 
   .tabs { display: flex; gap: 4px; padding: 10px 12px 0; }
   .tab {
@@ -299,7 +343,11 @@ function getHtml(): string {
     background: var(--vscode-sideBar-background, var(--vscode-editor-background));
     font-size: 11px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.4px; opacity: 0.7;
+    cursor: pointer; user-select: none;
   }
+  th:hover { opacity: 1; }
+  th.sorted { opacity: 1; }
+  .sort-ind { font-size: 10px; opacity: 0.9; }
   tbody tr:nth-child(even) td { background: rgba(128,128,128,0.05); }
   tbody tr:hover td { background: var(--vscode-list-hoverBackground); }
   td.mono { font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; opacity: 0.95; }
@@ -323,6 +371,7 @@ function getHtml(): string {
     <span id="status" class="pill">—</span>
     <span class="grow"></span>
     <span id="ts" class="ts"></span>
+    <button id="refresh" class="btn" title="Re-read config and refresh">⟳ Refresh</button>
   </div>
 
   <div class="tabs">
@@ -346,6 +395,9 @@ function getHtml(): string {
   for (const t of document.querySelectorAll('.tab')) {
     t.addEventListener('click', () => switchTab(t.dataset.tab));
   }
+  document.getElementById('refresh').addEventListener('click', () => {
+    vscodeApi.postMessage({ type: 'refresh' });
+  });
   function switchTab(name) {
     activeTab = name;
     for (const t of document.querySelectorAll('.tab'))
@@ -394,12 +446,39 @@ function getHtml(): string {
     return false;
   }
 
-  function renderTable(kind, columns, rows) {
+  // Bölüm verisi + sıralama durumu (panel yenilense de tercih korunur)
+  const secState = { threads: null, semaphores: null };
+
+  function parseNum(v) {
+    const s = String(v).trim();
+    if (/^[-+]?0x[0-9a-f]+$/i.test(s)) return parseInt(s, 16);
+    if (/^[-+]?\\d+(\\.\\d+)?$/.test(s)) return parseFloat(s);
+    return NaN;
+  }
+  function compareVals(a, b) {
+    const na = parseNum(a), nb = parseNum(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function buildTable(kind, columns, rows, sortCol, sortDir) {
     if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
+    let data = rows;
+    if (sortCol && columns.indexOf(sortCol) !== -1) {
+      data = rows.slice().sort((r1, r2) => {
+        const c = compareVals(r1[sortCol] ?? '', r2[sortCol] ?? '');
+        return sortDir === 'desc' ? -c : c;
+      });
+    }
     let h = '<table><thead><tr>';
-    for (const c of columns) h += '<th>' + esc(c) + '</th>';
+    for (const c of columns) {
+      const active = c === sortCol;
+      const ind = active ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
+      h += '<th class="' + (active ? 'sorted' : '') + '" data-col="' + esc(c) + '" title="Sort by ' + esc(c) + '">' +
+        esc(c) + '<span class="sort-ind">' + ind + '</span></th>';
+    }
     h += '</tr></thead><tbody>';
-    for (const row of rows) {
+    for (const row of data) {
       h += '<tr>';
       for (const c of columns) {
         const cls = isMono(kind, c) ? ' class="mono"' : '';
@@ -410,16 +489,40 @@ function getHtml(): string {
     return h + '</tbody></table>';
   }
 
+  function paint(name) {
+    const st = secState[name];
+    const pane = document.getElementById('pane-' + name);
+    if (!st || !st.sec) return;
+    pane.innerHTML =
+      '<div class="summary">' + esc(st.sec.summary) + '</div>' +
+      buildTable(st.sec.kind, st.sec.columns, st.sec.rows, st.sortCol, st.sortDir);
+  }
+
   function renderSection(name, sec) {
     const tab = document.getElementById('tab-' + name);
-    const pane = document.getElementById('pane-' + name);
     const cnt = document.getElementById('cnt-' + name);
-    if (!sec) { tab.classList.add('hidden'); return; }
+    if (!sec) { tab.classList.add('hidden'); secState[name] = null; return; }
     tab.classList.remove('hidden');
     cnt.textContent = sec.rows.length;
-    pane.innerHTML =
-      '<div class="summary">' + esc(sec.summary) + '</div>' +
-      renderTable(sec.kind, sec.columns, sec.rows);
+    const prev = secState[name];
+    const sortCol = prev && prev.sortCol && sec.columns.indexOf(prev.sortCol) !== -1 ? prev.sortCol : null;
+    const sortDir = prev && prev.sortDir ? prev.sortDir : 'asc';
+    secState[name] = { sec, sortCol, sortDir };
+    paint(name);
+  }
+
+  // Başlık tıklaması → sıralama (event delegation, bir kez kurulur)
+  for (const name of ['threads', 'semaphores']) {
+    document.getElementById('pane-' + name).addEventListener('click', e => {
+      const th = e.target.closest('th[data-col]');
+      if (!th) return;
+      const st = secState[name];
+      if (!st) return;
+      const col = th.dataset.col;
+      if (st.sortCol === col) st.sortDir = st.sortDir === 'asc' ? 'desc' : 'asc';
+      else { st.sortCol = col; st.sortDir = 'asc'; }
+      paint(name);
+    });
   }
 
   window.addEventListener('message', e => {
