@@ -2,6 +2,14 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.8.0] - 2026-06-06
+
+### Changed
+- **Clearer column reordering.** Dragging a column header now shows a blue
+  insertion line on the target column so you can see where it will land. In the
+  ▦ Columns menu, rows are draggable (with a ⠿ grip) and show a drop line while
+  dragging — the up/down arrow buttons were removed in favor of drag-to-reorder.
+
 ## [0.7.0] - 2026-06-06
 
 ### Changed

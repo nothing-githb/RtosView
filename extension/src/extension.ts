@@ -372,10 +372,14 @@ function getHtml(): string {
   .cols-menu.hidden { display: none; }
   .cols-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.55; padding: 2px 6px 6px; }
   .cols-item {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; padding: 4px 6px; border-radius: 5px;
+    display: flex; align-items: center; justify-content: flex-start;
+    gap: 8px; padding: 5px 6px; border-radius: 5px;
   }
   .cols-item:hover { background: var(--vscode-list-hoverBackground); }
+  .cols-item[draggable="true"] { cursor: grab; }
+  .cols-item.row-dragging { opacity: 0.4; }
+  .cols-item.drop-row { box-shadow: inset 0 2px 0 var(--vscode-focusBorder, #3498db); }
+  .cols-grip { opacity: 0.45; font-size: 12px; cursor: grab; user-select: none; }
   .cols-item label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12.5px; }
   .cols-move button {
     appearance: none; cursor: pointer; border: none; background: transparent;
@@ -424,6 +428,7 @@ function getHtml(): string {
   th:hover { opacity: 1; }
   th.sorted { opacity: 1; }
   th.dragging { opacity: 0.4; }
+  th.drop-target { box-shadow: inset 3px 0 0 var(--vscode-focusBorder, #3498db); }
   th[draggable="true"] { cursor: pointer; }
   .sort-ind { font-size: 10px; opacity: 0.9; }
   tbody tr:nth-child(even) td { background: rgba(128,128,128,0.05); }
@@ -663,15 +668,13 @@ function getHtml(): string {
     const st = secState[name];
     if (!menu) return;
     if (!st) { menu.innerHTML = ''; return; }
-    let h = '<div class="cols-title">Columns</div>';
-    st.order.forEach((label, i) => {
+    let h = '<div class="cols-title">Columns — drag to reorder</div>';
+    st.order.forEach(label => {
       const checked = st.hidden.indexOf(label) === -1 ? ' checked' : '';
-      h += '<div class="cols-item" data-label="' + esc(label) + '">' +
+      h += '<div class="cols-item" data-label="' + esc(label) + '" draggable="true">' +
+        '<span class="cols-grip" title="Drag to reorder">⠿</span>' +
         '<label><input type="checkbox" data-act="vis"' + checked + '> ' + esc(label) + '</label>' +
-        '<span class="cols-move">' +
-        '<button data-act="up" title="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
-        '<button data-act="down" title="Move down"' + (i === st.order.length - 1 ? ' disabled' : '') + '>↓</button>' +
-        '</span></div>';
+        '</div>';
     });
     menu.innerHTML = h;
   }
@@ -720,6 +723,11 @@ function getHtml(): string {
 
   // Tüm pane etkileşimleri #panes üzerinde delegasyonla (dinamik pane'ler için)
   let dragCol = null, dragName = null, suppressClick = false;
+  let menuDragLabel = null, menuDragName = null;
+  function clearDropMarks() {
+    for (const x of panesEl.querySelectorAll('.drop-target')) x.classList.remove('drop-target');
+    for (const x of panesEl.querySelectorAll('.drop-row')) x.classList.remove('drop-row');
+  }
 
   panesEl.addEventListener('click', e => {
     const colsBtn = e.target.closest('.cols-btn');
@@ -733,23 +741,6 @@ function getHtml(): string {
         menu.style.position = ''; menu.style.left = ''; menu.style.top = '';
         buildColsMenu(name);
         menu.classList.remove('hidden');
-      }
-      return;
-    }
-    const moveBtn = e.target.closest('.cols-menu button[data-act]');
-    if (moveBtn) {
-      e.stopPropagation();
-      const name = paneName(e);
-      const st = secState[name];
-      if (!st) return;
-      const label = moveBtn.closest('.cols-item').dataset.label;
-      const i = st.order.indexOf(label);
-      if (moveBtn.dataset.act === 'up' && i > 0) {
-        const t = st.order[i - 1]; st.order[i - 1] = st.order[i]; st.order[i] = t;
-        afterColChange(name, false);
-      } else if (moveBtn.dataset.act === 'down' && i < st.order.length - 1) {
-        const t = st.order[i + 1]; st.order[i + 1] = st.order[i]; st.order[i] = t;
-        afterColChange(name, false);
       }
       return;
     }
@@ -787,6 +778,14 @@ function getHtml(): string {
   });
 
   panesEl.addEventListener('dragstart', e => {
+    const item = e.target.closest('.cols-item');
+    if (item) {
+      menuDragName = paneName(e);
+      menuDragLabel = item.dataset.label;
+      item.classList.add('row-dragging');
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', menuDragLabel); }
+      return;
+    }
     const th = e.target.closest('th[data-col]');
     if (!th) return;
     suppressClick = false;
@@ -796,35 +795,63 @@ function getHtml(): string {
     if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragCol); }
   });
   panesEl.addEventListener('dragover', e => {
-    if (dragCol === null) return;
-    const th = e.target.closest('th[data-col]');
-    if (!th) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (menuDragLabel !== null) {
+      const item = e.target.closest('.cols-item');
+      if (!item) return;
+      e.preventDefault();
+      clearDropMarks();
+      item.classList.add('drop-row');
+      return;
+    }
+    if (dragCol !== null) {
+      const th = e.target.closest('th[data-col]');
+      if (!th) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      clearDropMarks();
+      th.classList.add('drop-target');
+    }
   });
   panesEl.addEventListener('drop', e => {
-    if (dragCol === null) return;
-    const th = e.target.closest('th[data-col]');
-    if (!th) return;
-    e.preventDefault();
-    const name = paneName(e);
-    const st = secState[name];
-    const target = th.dataset.col;
-    if (st && name === dragName && target !== dragCol) {
-      const from = st.order.indexOf(dragCol), to = st.order.indexOf(target);
-      if (from !== -1 && to !== -1) {
-        st.order.splice(from, 1);
-        st.order.splice(to, 0, dragCol);
-        afterColChange(name, false);
+    if (menuDragLabel !== null) {
+      e.preventDefault();
+      const item = e.target.closest('.cols-item');
+      const name = menuDragName;
+      const st = secState[name];
+      if (st && item) {
+        const target = item.dataset.label;
+        if (target !== menuDragLabel) {
+          const from = st.order.indexOf(menuDragLabel), to = st.order.indexOf(target);
+          if (from !== -1 && to !== -1) { st.order.splice(from, 1); st.order.splice(to, 0, menuDragLabel); afterColChange(name, false); }
+        }
       }
+      clearDropMarks();
+      menuDragLabel = null; menuDragName = null;
+      return;
     }
-    suppressClick = true;
-    setTimeout(() => { suppressClick = false; }, 60);
-    dragCol = null; dragName = null;
+    if (dragCol !== null) {
+      e.preventDefault();
+      const th = e.target.closest('th[data-col]');
+      const name = paneName(e);
+      const st = secState[name];
+      if (st && th && name === dragName) {
+        const target = th.dataset.col;
+        if (target !== dragCol) {
+          const from = st.order.indexOf(dragCol), to = st.order.indexOf(target);
+          if (from !== -1 && to !== -1) { st.order.splice(from, 1); st.order.splice(to, 0, dragCol); afterColChange(name, false); }
+        }
+      }
+      clearDropMarks();
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 60);
+      dragCol = null; dragName = null;
+    }
   });
   panesEl.addEventListener('dragend', () => {
-    for (const x of panesEl.querySelectorAll('th.dragging')) x.classList.remove('dragging');
-    dragCol = null; dragName = null;
+    for (const x of panesEl.querySelectorAll('.dragging')) x.classList.remove('dragging');
+    for (const x of panesEl.querySelectorAll('.row-dragging')) x.classList.remove('row-dragging');
+    clearDropMarks();
+    dragCol = null; dragName = null; menuDragLabel = null; menuDragName = null;
   });
   panesEl.addEventListener('contextmenu', e => {
     const th = e.target.closest('th[data-col]');

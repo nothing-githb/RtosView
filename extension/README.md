@@ -32,10 +32,11 @@ by hand in the debugger.
 - **Change highlighting.** Values that changed since the previous stop are
   highlighted (with ▲/▼ for numeric deltas), a "N changed" badge shows the total,
   and tabs that changed in the background flag their count.
-- **Pick & reorder columns.** Drag a column header to reorder, right-click a
-  header (or use the "▦ Columns" button) to show/hide columns. Order and
-  visibility are saved per workspace. Hidden columns are **not** read from GDB at
-  all — enabling one fetches its data on the spot.
+- **Pick & reorder columns.** Drag a column header to reorder (a blue line shows
+  where it lands), or drag the rows in the "▦ Columns" menu; right-click a header
+  or use the menu to show/hide. Order and visibility are saved per workspace.
+  Hidden columns are **not** read from GDB at all — enabling one fetches its data
+  on the spot.
 - **Read-only & safe.** RTOS Inspector only *reads* globals — it never calls
   functions, so your program state is never disturbed.
 - **Readable UI.** Recognized columns get automatic styling: a `State` column

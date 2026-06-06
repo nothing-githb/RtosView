@@ -36,9 +36,10 @@ by hand in the debugger.
 - **Sortable columns** (numeric/hex sort numerically, text alphabetically).
 - **Change highlighting** — values that changed since the previous stop are
   flagged, with ▲/▼ for numeric deltas and an "N changed" badge.
-- **Pick & reorder columns** — drag a header, or right-click / use the
-  "▦ Columns" menu to show/hide. Saved per workspace. **Hidden columns are not
-  read from GDB at all**; enabling one fetches its data on the spot.
+- **Pick & reorder columns** — drag a header (with a drop indicator) or drag the
+  rows in the "▦ Columns" menu to reorder; right-click a header / use the menu to
+  show-hide. Saved per workspace. **Hidden columns are not read from GDB at
+  all**; enabling one fetches its data on the spot.
 - **Refresh on demand or on change** — a Refresh button re-reads the config, and
   the panel auto-refreshes when `rtos-inspector.json` changes on disk.
 - **Read-only & safe** — only *reads* globals; never calls functions, so program
