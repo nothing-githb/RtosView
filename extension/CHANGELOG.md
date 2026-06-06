@@ -2,6 +2,20 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.10.0] - 2026-06-06
+
+### Added
+- **Master–detail sections.** A section whose `root` contains `${selected}`
+  becomes a *detail* table. Clicking a row in a master section resolves
+  `${selected}` to that element and re-fetches the detail sections — e.g. click a
+  process to see *its* thread / semaphore / mutex lists. The first master row is
+  auto-selected; the selected row is highlighted.
+
+### Other
+- The bundled demo is now process-based: two processes, each with its own
+  thread/semaphore/mutex lists, plus an independent timer array — to showcase
+  master–detail.
+
 ## [0.9.2] - 2026-06-06
 
 ### Changed

@@ -20,6 +20,8 @@ by hand in the debugger.
 - Inspect an RTOS scheduler's **thread / TCB** list, **semaphore** / **mutex**
   tables, or ready / blocked queues.
 - Walk any **linked list** or **array of structs** in plain C/C++ code.
+- **Drill from a parent into its children** — click a process to see its own
+  threads / semaphores / mutexes.
 - Watch values **change between stops** — state transitions, counters, refcounts.
 
 ## Features
@@ -28,6 +30,9 @@ by hand in the debugger.
   about your layout and no changes to your program.
 - **One tab per structure.** Add as many named sections as you have data
   structures — each becomes its own table, with tabs generated dynamically.
+- **Master–detail.** Give a section's `root` a `${selected}` placeholder and it
+  becomes a detail table; click a row in a master section (e.g. a process) to
+  populate it with *that* element's lists (its threads / semaphores / mutexes).
 - **Two traversal modes:** `linked_list` (head pointer + `next` field) and
   `array` (`count` elements, with `.` / `->` element access).
 - **Arbitrary root expressions** — anything valid in GDB, e.g.
@@ -133,6 +138,34 @@ section's JSON key is its tab label (`threads`, `semaphores`, `mutexes`,
 > list, a ready queue, or a memory free-list (`linked_list` or `array` mode) and
 > label the columns with any GDB expressions.
 
+### Master–detail (linked sections)
+
+To drill from a parent into its children, put a `${selected}` placeholder in a
+section's `root`. That section becomes a *detail* table; clicking a row in a
+master section resolves `${selected}` to the clicked element and re-fetches the
+details. For a process list whose processes each own their own sub-lists:
+
+```json
+{
+  "processes": {
+    "mode": "linked_list", "root": "g_process_list", "next": "next",
+    "fields": [ { "label": "PID", "expr": "pid" }, { "label": "Name", "expr": "name" } ]
+  },
+  "threads": {
+    "mode": "linked_list", "root": "${selected}->thread_list", "next": "next",
+    "fields": [ { "label": "ID", "expr": "id" }, { "label": "State", "expr": "state" } ]
+  },
+  "mutexes": {
+    "mode": "linked_list", "root": "${selected}->mutex_list", "next": "next",
+    "fields": [ { "label": "ID", "expr": "id" }, { "label": "Owner", "expr": "owner" } ]
+  }
+}
+```
+
+Click a process row and the `threads` and `mutexes` tables show *that* process's
+lists. The first master row is selected automatically. Array detail sections may
+also use `${selected}` in `count` (e.g. `"count": "${selected}->n"`).
+
 ### Settings
 
 | Setting                | Default          | Description |
@@ -173,11 +206,13 @@ Extension Development Host.
 ## Try the example
 
 Open `test-workspace/` as a folder. It contains `threads_demo.c` — a tiny demo
-with four structures: a thread list, a semaphore list and a mutex list (all
-`linked_list`) plus a timer array (`array` mode) — and a matching
-`rtos-inspector.json` with one section per structure, so you see four tabs. The
-`.vscode/{launch,tasks}.example.json` templates (copy to `launch.json`/
-`tasks.json` and set your toolchain path) include Cygwin GDB tips in comments.
+with **two processes**, each owning its own thread / semaphore / mutex lists,
+plus an independent timer array. The matching `rtos-inspector.json` wires this as
+**master–detail**: a `processes` tab plus `threads`/`semaphores`/`mutexes` detail
+tabs (via `${selected}`) and a standalone `timers` array tab — click a process
+row to drill into its lists. The `.vscode/{launch,tasks}.example.json` templates
+(copy to `launch.json`/`tasks.json` and set your toolchain path) include Cygwin
+GDB tips in comments.
 
 ## License
 

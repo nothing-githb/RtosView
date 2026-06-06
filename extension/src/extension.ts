@@ -18,7 +18,12 @@ interface SectionCfg {
 type SyncCfg = Record<string, unknown>;
 
 type Row = Record<string, string>;
-interface Section { name: string; columnsAll: string[]; hidden: string[]; rows: Row[]; summary: string; }
+interface Section {
+  name: string; columnsAll: string[]; hidden: string[]; rows: Row[]; summary: string;
+  selectable?: boolean;       // master bölüm: satırları tıklanabilir
+  selectedKey?: string;       // seçili master satırının anahtarı (ilk kolon değeri)
+  needsSelection?: boolean;   // detay bölüm: henüz seçim yok
+}
 interface ColPref { order: string[]; hidden: string[]; }
 
 // ---------------------------------------------------------------------------
@@ -32,6 +37,8 @@ let columnPrefs: Record<string, ColPref> = {};
 const COLPREF_KEY = 'rtosInspector.columnPrefs';
 let paused = false;                         // duraklatılınca durakta otomatik yenileme yapılmaz
 const PAUSED_KEY = 'rtosInspector.paused';
+let selectedMaster: string | undefined;     // master-detail: seçili master bölüm adı
+let selectedKey: string | undefined;        // seçili master satırının anahtarı
 
 // ---------------------------------------------------------------------------
 // Aktivasyon
@@ -272,6 +279,31 @@ async function buildSection(
 }
 
 // ---------------------------------------------------------------------------
+// Master-detail: ${selected} yer tutucusu
+// ---------------------------------------------------------------------------
+function isDetail(cfg: SectionCfg): boolean {
+  return typeof cfg.root === 'string' && cfg.root.indexOf('${selected}') !== -1;
+}
+// Master satırın elemanını yeniden seçen ifade (tip-güvenli, adres/cast gerektirmez)
+function selectorExpr(cfg: SectionCfg, index: number): string {
+  if (cfg.mode === 'array') return '(' + cfg.root + ')[' + index + ']';
+  let e = cfg.root;
+  const nx = cfg.next ?? 'next';
+  for (let k = 0; k < index; k++) e = e + '->' + nx;   // root(->next)^index
+  return e;
+}
+function substituteSel(expr: string, sel: string): string {
+  return expr.split('${selected}').join('(' + sel + ')');
+}
+function firstActiveLabel(sec: Section): string | undefined {
+  return sec.columnsAll.find(l => sec.hidden.indexOf(l) === -1);
+}
+function rowKeyAt(sec: Section, idx: number): string | undefined {
+  const fa = firstActiveLabel(sec);
+  return fa ? sec.rows[idx]?.[fa] : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Yenileme
 // ---------------------------------------------------------------------------
 async function refresh(session: vscode.DebugSession, threadId: number) {
@@ -286,9 +318,52 @@ async function refresh(session: vscode.DebugSession, threadId: number) {
   } catch { /* ignore */ }
 
   const secs = extractSections(cfg);
+  const hasDetail = secs.some(s => isDetail(s.cfg));
+
+  // 1. geçiş: master/bağımsız bölümleri (detay olmayan) topla + satır seçim ifadeleri
+  const masters: Record<string, { sec: Section; selExprs: string[] }> = {};
+  for (let i = 0; i < secs.length; i++) {
+    const { name, cfg: scfg } = secs[i];
+    if (isDetail(scfg)) continue;
+    const sec = await buildSection(session, scfg, frameId, '$ri_' + i, name);
+    if (hasDetail) sec.selectable = true;
+    masters[name] = { sec, selExprs: sec.rows.map((_, idx) => selectorExpr(scfg, idx)) };
+  }
+
+  // Seçimi çöz -> ${selected} ifadesi
+  let selExpr: string | undefined;
+  if (hasDetail) {
+    let m = (selectedMaster && masters[selectedMaster]) ? masters[selectedMaster] : undefined;
+    if (!m) {
+      const firstName = secs.map(s => s.name).find(n => masters[n] && masters[n].sec.rows.length);
+      if (firstName) { selectedMaster = firstName; m = masters[firstName]; selectedKey = rowKeyAt(m.sec, 0); }
+    }
+    if (m && m.sec.rows.length) {
+      const fa = firstActiveLabel(m.sec);
+      let idx = (fa && selectedKey != null) ? m.sec.rows.findIndex(r => r[fa] === selectedKey) : -1;
+      if (idx < 0) { idx = 0; selectedKey = rowKeyAt(m.sec, 0); }
+      selExpr = m.selExprs[idx];
+      m.sec.selectedKey = selectedKey;
+    }
+  }
+
+  // 2. geçiş: config sırasıyla birleştir; detay bölümleri ${selected} yerine konarak topla
   const sections: Section[] = [];
   for (let i = 0; i < secs.length; i++) {
-    sections.push(await buildSection(session, secs[i].cfg, frameId, '$ri_' + i, secs[i].name));
+    const { name, cfg: scfg } = secs[i];
+    if (!isDetail(scfg)) { sections.push(masters[name].sec); continue; }
+    const allLabels = scfg.fields.map(f => f.label);
+    const eff = effectiveColumns(name, allLabels);
+    if (!selExpr) {
+      sections.push({ name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: '', needsSelection: true });
+      continue;
+    }
+    const subCfg: SectionCfg = {
+      ...scfg,
+      root: substituteSel(scfg.root, selExpr),
+      count: scfg.count ? substituteSel(scfg.count, selExpr) : scfg.count
+    };
+    sections.push(await buildSection(session, subCfg, frameId, '$ri_' + i, name));
   }
 
   panel.webview.postMessage({
@@ -323,6 +398,10 @@ function openPanel(context: vscode.ExtensionContext) {
         paused = !!msg.paused;
         extContext?.workspaceState.update(PAUSED_KEY, paused);
         if (!paused && lastStopped) refresh(lastStopped.session, lastStopped.threadId);
+      } else if (msg?.type === 'selectMaster' && typeof msg.section === 'string') {
+        selectedMaster = msg.section;
+        selectedKey = typeof msg.key === 'string' ? msg.key : undefined;
+        doRefresh();   // detay bölümleri seçili elemana göre yeniden çek
       }
     },
     null,
@@ -449,6 +528,9 @@ function getHtml(): string {
   tbody tr:hover td { background: var(--vscode-list-hoverBackground); }
   td.mono { font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; opacity: 0.95; }
   td.idcol { font-weight: 700; opacity: 0.9; }
+  tbody tr.selrow td { cursor: pointer; }
+  tbody tr.selected td { background: rgba(59,158,255,0.16) !important; }
+  tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 #3b9eff; }
 
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
@@ -638,7 +720,7 @@ function getHtml(): string {
     return { map, count };
   }
 
-  function buildTable(columns, rows, sortCol, sortDir, changed) {
+  function buildTable(columns, rows, sortCol, sortDir, changed, selectable, selectedKey) {
     if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
     let data = rows;
     if (sortCol && columns.indexOf(sortCol) !== -1) {
@@ -658,7 +740,10 @@ function getHtml(): string {
     h += '</tr></thead><tbody>';
     for (const row of data) {
       const rk = rowKeyOf(row, columns);
-      h += '<tr>';
+      const trCls = [];
+      if (selectable) trCls.push('selrow');
+      if (selectable && selectedKey != null && rk === selectedKey) trCls.push('selected');
+      h += '<tr data-key="' + esc(rk) + '"' + (trCls.length ? ' class="' + trCls.join(' ') + '"' : '') + '>';
       for (const c of columns) {
         const ck = rk + '\\u0000' + c;
         const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
@@ -686,10 +771,14 @@ function getHtml(): string {
     const st = secState[name];
     const body = bodyEl(name);
     if (!st || !st.sec || !body) return;
+    if (st.sec.needsSelection) {
+      body.innerHTML = '<div class="empty">Select a row in a master section to populate this table.</div>';
+      return;
+    }
     const cols = displayCols(st);
     body.innerHTML =
       '<div class="summary">' + esc(st.sec.summary) + '</div>' +
-      buildTable(cols, st.sec.rows, st.sortCol, st.sortDir, st.changed);
+      buildTable(cols, st.sec.rows, st.sortCol, st.sortDir, st.changed, st.sec.selectable, st.sec.selectedKey);
   }
 
   function buildColsMenu(name) {
@@ -796,6 +885,16 @@ function getHtml(): string {
       if (st.sortCol === col) st.sortDir = st.sortDir === 'asc' ? 'desc' : 'asc';
       else { st.sortCol = col; st.sortDir = 'asc'; }
       paint(name);
+      return;
+    }
+    // master satır seçimi (detay bölümleri günceller)
+    const tr = e.target.closest('tbody tr[data-key]');
+    if (tr) {
+      const name = paneName(e);
+      const st = secState[name];
+      if (st && st.sec && st.sec.selectable) {
+        vscodeApi.postMessage({ type: 'selectMaster', section: name, key: tr.dataset.key });
+      }
     }
   });
 

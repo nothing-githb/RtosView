@@ -43,6 +43,16 @@ typedef struct kmutex {
     struct kmutex  *next;
 } kmutex_t;
 
+/* ---------------- Process (master: alt listeleri tutar) ---------------- */
+typedef struct process {
+    int              pid;
+    const char      *name;
+    tcb_t           *thread_list;   /* bu process'in thread'leri */
+    ksem_t          *sem_list;      /* bu process'in semaphore'lari */
+    kmutex_t        *mutex_list;    /* bu process'in mutex'leri */
+    struct process  *next;
+} process_t;
+
 /* ---------------- Timer (array-mode ornegi: g_timers[count]) ---------------- */
 typedef struct {
     int          id;
@@ -76,6 +86,10 @@ int      g_mutex_count = 0;
 #define MAX_TIMERS  8
 ktimer_t g_timers[MAX_TIMERS];
 int      g_timer_count = 0;
+#define MAX_PROCS   4
+process_t g_procs[MAX_PROCS];
+int       g_proc_count = 0;
+process_t *g_process_list;   /* master listenin başı */
 
 kpool_t  g_pool0;
 kernel_t g_kernel;
@@ -112,6 +126,15 @@ static void mk_timer(int id, const char *name, int period, int elapsed, int acti
     t->id = id; t->name = name; t->period = period; t->elapsed = elapsed; t->active = active;
 }
 
+static process_t *mk_proc(int pid, const char *name, tcb_t *threads, ksem_t *sems, kmutex_t *mutexes)
+{
+    process_t *p = &g_procs[g_proc_count++];
+    p->pid = pid; p->name = name;
+    p->thread_list = threads; p->sem_list = sems; p->mutex_list = mutexes;
+    p->next = NULL;
+    return p;
+}
+
 /* Breakpoint'i buraya koy. printf yerine gozlemlenebilir bir yan etki. */
 static volatile unsigned g_sink;
 static void inspect_point(int tick)
@@ -125,21 +148,31 @@ int main(void)
     tcb_t *b = mk_thread(2, "worker-1", READY,   5);
     tcb_t *c = mk_thread(3, "worker-2", BLOCKED, 5);
     tcb_t *d = mk_thread(4, "logger",   WAITING, 9);
-    a->next = b; b->next = c; c->next = d; d->next = NULL;
+    a->next = b; b->next = NULL;     /* init process'in thread'leri */
+    c->next = d; d->next = NULL;     /* worker process'in thread'leri */
 
     ksem_t *s0 = mk_sem(1, 0, 1, 2, FIFO);
     ksem_t *s1 = mk_sem(2, 3, 5, 0, PRIORITY);
     ksem_t *s2 = mk_sem(3, 1, 1, 0, FIFO);
-    s0->next = s1; s1->next = s2; s2->next = NULL;
+    s0->next = s1; s1->next = NULL;  /* init */
+    s2->next = NULL;                 /* worker */
 
     kmutex_t *m0 = mk_mutex(1, "bus_lock", 1, 1, 1);
     kmutex_t *m1 = mk_mutex(2, "log_lock", 0, 0, 0);
-    m0->next = m1; m1->next = NULL;
+    m0->next = NULL;                 /* init */
+    m1->next = NULL;                 /* worker */
 
     mk_timer(1, "tick",     10,  3, 1);
     mk_timer(2, "watchdog", 100, 50, 1);
     mk_timer(3, "blink",    5,   0, 0);
 
+    /* master liste: 2 process, her biri kendi alt listeleriyle */
+    process_t *p0 = mk_proc(1, "init",   a, s0, m0);
+    process_t *p1 = mk_proc(2, "worker", c, s2, m1);
+    p0->next = p1; p1->next = NULL;
+    g_process_list = p0;
+
+    /* eski pool kökü de geçerli kalsın */
     g_pool0.thread_list = a;
     g_pool0.sem_list    = s0;
     g_pool0.mutex_list  = m0;

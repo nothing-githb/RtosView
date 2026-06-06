@@ -1,20 +1,31 @@
 {
-  "threads": {
+  "//": "Master-detail örneği: 'processes' tablosunda bir satıra tıkla; thread/semaphore/mutex tabloları o process'e göre dolar (${selected}). 'timers' bağımsız (array).",
+
+  "processes": {
     "mode": "linked_list",
-    "root": "g_kernel.pools[0]->thread_list",
+    "root": "g_process_list",
     "next": "next",
     "fields": [
-      { "label": "ID",           "expr": "id" },
-      { "label": "Name",        "expr": "name" },
-      { "label": "State",       "expr": "state" },
-      { "label": "Priority",    "expr": "prio" },
-      { "label": "Stack Start", "expr": "stack_base" },
-      { "label": "Stack Size",  "expr": "stack_size" }
+      { "label": "PID",  "expr": "pid" },
+      { "label": "Name", "expr": "name" }
     ]
   },
+
+  "threads": {
+    "mode": "linked_list",
+    "root": "${selected}->thread_list",
+    "next": "next",
+    "fields": [
+      { "label": "ID",       "expr": "id" },
+      { "label": "Name",     "expr": "name" },
+      { "label": "State",    "expr": "state" },
+      { "label": "Priority", "expr": "prio" }
+    ]
+  },
+
   "semaphores": {
     "mode": "linked_list",
-    "root": "g_kernel.pools[0]->sem_list",
+    "root": "${selected}->sem_list",
     "next": "next",
     "fields": [
       { "label": "ID",         "expr": "id" },
@@ -24,18 +35,19 @@
       { "label": "Discipline", "expr": "discipline" }
     ]
   },
+
   "mutexes": {
     "mode": "linked_list",
-    "root": "g_kernel.pools[0]->mutex_list",
+    "root": "${selected}->mutex_list",
     "next": "next",
     "fields": [
       { "label": "ID",      "expr": "id" },
       { "label": "Name",    "expr": "name" },
       { "label": "Owner",   "expr": "owner" },
-      { "label": "Locked",  "expr": "locked" },
-      { "label": "Waiters", "expr": "waiters" }
+      { "label": "Locked",  "expr": "locked" }
     ]
   },
+
   "timers": {
     "mode": "array",
     "root": "g_timers",

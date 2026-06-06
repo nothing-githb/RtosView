@@ -40,6 +40,9 @@ by hand in the debugger.
   or use the menu to show/hide. Order and visibility are saved per workspace.
   Hidden columns are **not** read from GDB at all — enabling one fetches its data
   on the spot.
+- **Master–detail.** A section whose `root` contains `${selected}` becomes a
+  detail table; click a row in a master section (e.g. a process) to populate it
+  with that element's lists. The first master row is auto-selected.
 - **Read-only & safe.** RTOS Inspector only *reads* globals — it never calls
   functions, so your program state is never disturbed.
 - **Readable UI.** Recognized columns get automatic styling: a `State` column
@@ -141,6 +144,24 @@ An `array`-mode example:
 > Add a section for **any** struct collection — a mutex list, a ready queue, a
 > free-list, etc. — in either mode; each gets its own tab. Column labels and
 > expressions are entirely up to you.
+
+### Master–detail
+
+Put `${selected}` in a section's `root` to make it a *detail* table that follows
+the row you click in a master section. For example, a `processes` master with
+`threads`/`mutexes` details:
+
+```json
+{
+  "processes": { "mode": "linked_list", "root": "g_process_list", "next": "next",
+    "fields": [ { "label": "PID", "expr": "pid" }, { "label": "Name", "expr": "name" } ] },
+  "threads":   { "mode": "linked_list", "root": "${selected}->thread_list", "next": "next",
+    "fields": [ { "label": "ID", "expr": "id" }, { "label": "State", "expr": "state" } ] }
+}
+```
+
+Clicking a process row fills `threads` with that process's thread list. `count`
+may also reference `${selected}` for array details.
 
 ### Notes on `expr`
 
