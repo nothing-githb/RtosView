@@ -466,9 +466,7 @@ function getHtml(): string {
     background: rgba(241,196,15,0.16) !important;
     box-shadow: inset 2px 0 0 #f1c40f;
   }
-  .delta { font-size: 10px; margin-left: 5px; font-weight: 700; }
-  .delta.up { color: #2ecc71; }
-  .delta.down { color: #e74c3c; }
+  .old { opacity: 0.45; font-size: 11px; margin-left: 7px; text-decoration: line-through; }
   .tab.haschg .badge-count { background: #f1c40f; color: #1e1e1e; }
 </style>
 </head>
@@ -626,10 +624,7 @@ function getHtml(): string {
       for (const c of columns) {
         const nv = String(r[c] ?? ''), pv = String(p[c] ?? '');
         if (nv !== pv) {
-          const na = parseNum(nv), pa = parseNum(pv);
-          let dir = '';
-          if (!isNaN(na) && !isNaN(pa)) dir = na > pa ? 'up' : (na < pa ? 'down' : '');
-          map[rowKeyOf(r, columns) + '\\u0000' + c] = dir;
+          map[rowKeyOf(r, columns) + '\\u0000' + c] = pv;  // eski değeri sakla
           count++;
         }
       }
@@ -667,9 +662,7 @@ function getHtml(): string {
         const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
         let inner = cell(c, row[c] ?? '');
         if (isChg) {
-          const dir = changed[ck];
-          const arrow = dir === 'up' ? '▲' : (dir === 'down' ? '▼' : '');
-          if (arrow) inner += '<span class="delta ' + dir + '">' + arrow + '</span>';
+          inner += '<span class="old" title="previous value">' + esc(changed[ck]) + '</span>';
         }
         h += '<td' + clsAttr + '>' + inner + '</td>';
       }

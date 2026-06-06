@@ -2,6 +2,12 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.9.1] - 2026-06-06
+
+### Changed
+- Change highlighting now shows the **previous value faded (struck-through)**
+  next to the new value, instead of a ▲/▼ direction arrow.
+
 ## [0.9.0] - 2026-06-06
 
 ### Added

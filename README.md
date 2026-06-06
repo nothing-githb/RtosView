@@ -35,7 +35,8 @@ by hand in the debugger.
 - **Live updates** on every stop, with a "running…" badge while the program runs.
 - **Sortable columns** (numeric/hex sort numerically, text alphabetically).
 - **Change highlighting** — values that changed since the previous stop are
-  flagged, with ▲/▼ for numeric deltas and an "N changed" badge.
+  flagged, with the previous value shown faded (struck-through) next to the new
+  one, plus an "N changed" badge.
 - **Pick & reorder columns** — drag a header (with a drop indicator) or drag the
   rows in the "▦ Columns" menu to reorder; right-click a header / use the menu to
   show-hide. Saved per workspace. **Hidden columns are not read from GDB at

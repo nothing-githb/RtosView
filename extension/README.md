@@ -32,8 +32,9 @@ by hand in the debugger.
 - **Pause / Resume.** Stop auto-refreshing (and querying GDB) on each stop when
   you don't need it; Refresh still works on demand. Remembered per workspace.
 - **Change highlighting.** Values that changed since the previous stop are
-  highlighted (with ▲/▼ for numeric deltas), a "N changed" badge shows the total,
-  and tabs that changed in the background flag their count.
+  highlighted, with the previous value shown faded (struck-through) next to the
+  new one; a "N changed" badge shows the total, and tabs that changed in the
+  background flag their count.
 - **Pick & reorder columns.** Drag a column header to reorder (a blue line shows
   where it lands), or drag the rows in the "▦ Columns" menu; right-click a header
   or use the menu to show/hide. Order and visibility are saved per workspace.
