@@ -4,7 +4,7 @@
     "root": "g_kernel.pools[0]->thread_list",
     "next": "next",
     "fields": [
-      { "label": "ID2",          "expr": "id" },
+      { "label": "ID",           "expr": "id" },
       { "label": "Name",        "expr": "name" },
       { "label": "State",       "expr": "state" },
       { "label": "Priority",    "expr": "prio" },
