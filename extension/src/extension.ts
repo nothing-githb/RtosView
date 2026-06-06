@@ -467,6 +467,12 @@ function getHtml(): string {
     box-shadow: inset 2px 0 0 #f1c40f;
   }
   .old { opacity: 0.45; font-size: 11px; margin-left: 7px; text-decoration: line-through; }
+  .drag-ghost {
+    position: fixed; top: -1000px; left: -1000px; pointer-events: none;
+    background: #3b9eff; color: #fff; font-size: 12px; font-weight: 700;
+    padding: 5px 11px; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+    white-space: nowrap;
+  }
   .tab.haschg .badge-count { background: #f1c40f; color: #1e1e1e; }
 </style>
 </head>
@@ -746,10 +752,22 @@ function getHtml(): string {
 
   // Tüm pane etkileşimleri #panes üzerinde delegasyonla (dinamik pane'ler için)
   let dragCol = null, dragName = null, suppressClick = false;
-  let menuDragLabel = null, menuDragName = null;
+  let menuDragLabel = null, menuDragName = null, dragGhost = null;
   function clearDropMarks() {
     for (const x of panesEl.querySelectorAll('.drop-target')) x.classList.remove('drop-target');
     for (const x of panesEl.querySelectorAll('.drop-row')) x.classList.remove('drop-row');
+  }
+  // Sürüklenen öğenin imleci takip eden net önizlemesi (çip)
+  function setGhost(e, label) {
+    const g = document.createElement('div');
+    g.className = 'drag-ghost';
+    g.textContent = label;
+    document.body.appendChild(g);
+    if (e.dataTransfer && e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(g, 12, 14);
+    dragGhost = g;
+  }
+  function clearGhost() {
+    if (dragGhost) { dragGhost.remove(); dragGhost = null; }
   }
 
   panesEl.addEventListener('click', e => {
@@ -807,6 +825,7 @@ function getHtml(): string {
       menuDragLabel = item.dataset.label;
       item.classList.add('row-dragging');
       if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', menuDragLabel); }
+      setGhost(e, menuDragLabel);
       return;
     }
     const th = e.target.closest('th[data-col]');
@@ -816,6 +835,7 @@ function getHtml(): string {
     dragCol = th.dataset.col;
     th.classList.add('dragging');
     if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragCol); }
+    setGhost(e, dragCol);
   });
   panesEl.addEventListener('dragover', e => {
     if (menuDragLabel !== null) {
@@ -874,6 +894,7 @@ function getHtml(): string {
     for (const x of panesEl.querySelectorAll('.dragging')) x.classList.remove('dragging');
     for (const x of panesEl.querySelectorAll('.row-dragging')) x.classList.remove('row-dragging');
     clearDropMarks();
+    clearGhost();
     dragCol = null; dragName = null; menuDragLabel = null; menuDragName = null;
   });
   panesEl.addEventListener('contextmenu', e => {

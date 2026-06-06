@@ -2,6 +2,13 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.9.2] - 2026-06-06
+
+### Changed
+- While dragging a column (header or Columns-menu row), a clear blue **preview
+  chip** with the column name now follows the cursor, replacing the browser's
+  faint default drag image.
+
 ## [0.9.1] - 2026-06-06
 
 ### Changed
