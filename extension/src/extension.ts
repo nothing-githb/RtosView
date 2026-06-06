@@ -363,12 +363,23 @@ function getHtml(): string {
   .crit { color: #e74c3c; font-weight: 700; }
 
   .empty { opacity: 0.55; padding: 28px 4px; font-size: 13px; }
+
+  .pill.chg { background: rgba(241,196,15,0.20); color: #f1c40f; }
+  td.changed {
+    background: rgba(241,196,15,0.16) !important;
+    box-shadow: inset 2px 0 0 #f1c40f;
+  }
+  .delta { font-size: 10px; margin-left: 5px; font-weight: 700; }
+  .delta.up { color: #2ecc71; }
+  .delta.down { color: #e74c3c; }
+  .tab.haschg .badge-count { background: #f1c40f; color: #1e1e1e; }
 </style>
 </head>
 <body>
   <div class="topbar">
     <h1>SyncWatch</h1>
     <span id="status" class="pill">—</span>
+    <span id="changes" class="pill chg hidden"></span>
     <span class="grow"></span>
     <span id="ts" class="ts"></span>
     <button id="refresh" class="btn" title="Re-read config and refresh">⟳ Refresh</button>
@@ -400,8 +411,10 @@ function getHtml(): string {
   });
   function switchTab(name) {
     activeTab = name;
-    for (const t of document.querySelectorAll('.tab'))
+    for (const t of document.querySelectorAll('.tab')) {
       t.classList.toggle('active', t.dataset.tab === name);
+      if (t.dataset.tab === name) t.classList.remove('haschg');
+    }
     for (const p of document.querySelectorAll('.pane'))
       p.classList.toggle('hidden', p.id !== 'pane-' + name);
   }
@@ -461,7 +474,34 @@ function getHtml(): string {
     return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
   }
 
-  function buildTable(kind, columns, rows, sortCol, sortDir) {
+  // Satır kimliği = ilk kolonun değeri (genelde ID). Değişen hücreleri bulur.
+  function rowKeyOf(row, columns) {
+    return columns.length ? String(row[columns[0]] ?? '') : '';
+  }
+  function computeChanges(prevRows, newRows, columns) {
+    const map = {};
+    let count = 0;
+    if (!prevRows) return { map, count };
+    const prevByKey = {};
+    for (const r of prevRows) prevByKey[rowKeyOf(r, columns)] = r;
+    for (const r of newRows) {
+      const p = prevByKey[rowKeyOf(r, columns)];
+      if (!p) continue; // yeni satır: vurgulama
+      for (const c of columns) {
+        const nv = String(r[c] ?? ''), pv = String(p[c] ?? '');
+        if (nv !== pv) {
+          const na = parseNum(nv), pa = parseNum(pv);
+          let dir = '';
+          if (!isNaN(na) && !isNaN(pa)) dir = na > pa ? 'up' : (na < pa ? 'down' : '');
+          map[rowKeyOf(r, columns) + '\\u0000' + c] = dir;
+          count++;
+        }
+      }
+    }
+    return { map, count };
+  }
+
+  function buildTable(kind, columns, rows, sortCol, sortDir, changed) {
     if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
     let data = rows;
     if (sortCol && columns.indexOf(sortCol) !== -1) {
@@ -479,10 +519,22 @@ function getHtml(): string {
     }
     h += '</tr></thead><tbody>';
     for (const row of data) {
+      const rk = rowKeyOf(row, columns);
       h += '<tr>';
       for (const c of columns) {
-        const cls = isMono(kind, c) ? ' class="mono"' : '';
-        h += '<td' + cls + '>' + cell(kind, c, row[c] ?? '') + '</td>';
+        const ck = rk + '\\u0000' + c;
+        const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
+        const classes = [];
+        if (isMono(kind, c)) classes.push('mono');
+        if (isChg) classes.push('changed');
+        const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
+        let inner = cell(kind, c, row[c] ?? '');
+        if (isChg) {
+          const dir = changed[ck];
+          const arrow = dir === 'up' ? '▲' : (dir === 'down' ? '▼' : '');
+          if (arrow) inner += '<span class="delta ' + dir + '">' + arrow + '</span>';
+        }
+        h += '<td' + clsAttr + '>' + inner + '</td>';
       }
       h += '</tr>';
     }
@@ -495,20 +547,25 @@ function getHtml(): string {
     if (!st || !st.sec) return;
     pane.innerHTML =
       '<div class="summary">' + esc(st.sec.summary) + '</div>' +
-      buildTable(st.sec.kind, st.sec.columns, st.sec.rows, st.sortCol, st.sortDir);
+      buildTable(st.sec.kind, st.sec.columns, st.sec.rows, st.sortCol, st.sortDir, st.changed);
   }
 
   function renderSection(name, sec) {
     const tab = document.getElementById('tab-' + name);
     const cnt = document.getElementById('cnt-' + name);
-    if (!sec) { tab.classList.add('hidden'); secState[name] = null; return; }
+    if (!sec) { tab.classList.add('hidden'); secState[name] = null; return 0; }
     tab.classList.remove('hidden');
     cnt.textContent = sec.rows.length;
     const prev = secState[name];
     const sortCol = prev && prev.sortCol && sec.columns.indexOf(prev.sortCol) !== -1 ? prev.sortCol : null;
     const sortDir = prev && prev.sortDir ? prev.sortDir : 'asc';
-    secState[name] = { sec, sortCol, sortDir };
+    const ch = computeChanges(prev && prev.sec ? prev.sec.rows : null, sec.rows, sec.columns);
+    secState[name] = { sec, sortCol, sortDir, changed: ch.map, changeCount: ch.count };
+    // değişen ama o an açık olmayan sekmeyi işaretle
+    if (ch.count > 0 && name !== activeTab) tab.classList.add('haschg');
+    else if (name === activeTab) tab.classList.remove('haschg');
     paint(name);
+    return ch.count;
   }
 
   // Başlık tıklaması → sıralama (event delegation, bir kez kurulur)
@@ -531,8 +588,15 @@ function getHtml(): string {
       statusEl.textContent = 'stopped';
       statusEl.className = 'pill';
       tsEl.textContent = m.ts ? ('updated ' + m.ts) : '';
-      renderSection('threads', m.sections.threads);
-      renderSection('semaphores', m.sections.semaphores);
+      const changed = (renderSection('threads', m.sections.threads) || 0) +
+                      (renderSection('semaphores', m.sections.semaphores) || 0);
+      const chEl = document.getElementById('changes');
+      if (changed > 0) {
+        chEl.textContent = changed + ' changed';
+        chEl.classList.remove('hidden');
+      } else {
+        chEl.classList.add('hidden');
+      }
       // aktif sekme gizlendiyse görünen ilk sekmeye geç
       const at = document.getElementById('tab-' + activeTab);
       if (at.classList.contains('hidden')) {

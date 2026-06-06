@@ -2,6 +2,15 @@
 
 All notable changes to the **SyncWatch** extension are documented here.
 
+## [0.4.0] - 2026-06-06
+
+### Added
+- **Change highlighting.** When the panel refreshes at a new stop, cells whose
+  value changed since the previous stop are highlighted (amber), numeric values
+  get a ▲/▼ direction arrow, a "N changed" badge appears in the toolbar, and a
+  tab that changed while not focused gets its count badge highlighted. Rows are
+  matched by their first column (e.g. ID).
+
 ## [0.3.0] - 2026-06-05
 
 ### Added
