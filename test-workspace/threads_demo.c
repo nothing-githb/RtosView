@@ -43,6 +43,15 @@ typedef struct kmutex {
     struct kmutex  *next;
 } kmutex_t;
 
+/* ---------------- Timer (array-mode ornegi: g_timers[count]) ---------------- */
+typedef struct {
+    int          id;
+    const char  *name;
+    int          period;
+    int          elapsed;
+    int          active;
+} ktimer_t;
+
 /* ---------------- Kernel / pool (karmasik root icin) ---------------- */
 typedef struct kpool {
     tcb_t    *thread_list;
@@ -64,6 +73,9 @@ ksem_t   g_sems[MAX_SEMS];
 int      g_sem_count = 0;
 kmutex_t g_mutexes[MAX_MUTEXES];
 int      g_mutex_count = 0;
+#define MAX_TIMERS  8
+ktimer_t g_timers[MAX_TIMERS];
+int      g_timer_count = 0;
 
 kpool_t  g_pool0;
 kernel_t g_kernel;
@@ -94,11 +106,17 @@ static kmutex_t *mk_mutex(int id, const char *name, int owner, int locked, int w
     return m;
 }
 
+static void mk_timer(int id, const char *name, int period, int elapsed, int active)
+{
+    ktimer_t *t = &g_timers[g_timer_count++];
+    t->id = id; t->name = name; t->period = period; t->elapsed = elapsed; t->active = active;
+}
+
 /* Breakpoint'i buraya koy. printf yerine gozlemlenebilir bir yan etki. */
 static volatile unsigned g_sink;
 static void inspect_point(int tick)
 {
-    g_sink = (unsigned)(tick + g_thread_count + g_sem_count + g_mutex_count);
+    g_sink = (unsigned)(tick + g_thread_count + g_sem_count + g_mutex_count + g_timer_count);
 }
 
 int main(void)
@@ -118,6 +136,10 @@ int main(void)
     kmutex_t *m1 = mk_mutex(2, "log_lock", 0, 0, 0);
     m0->next = m1; m1->next = NULL;
 
+    mk_timer(1, "tick",     10,  3, 1);
+    mk_timer(2, "watchdog", 100, 50, 1);
+    mk_timer(3, "blink",    5,   0, 0);
+
     g_pool0.thread_list = a;
     g_pool0.sem_list    = s0;
     g_pool0.mutex_list  = m0;
@@ -129,6 +151,7 @@ int main(void)
         c->state   = (tick % 2) ? BLOCKED : WAITING;
         m1->locked = (tick % 2);
         m1->owner  = (tick % 2) ? 4 : 0;
+        g_timers[0].elapsed = tick;          /* array eleman alanı her tick değişir */
         inspect_point(tick);
     }
     return 0;

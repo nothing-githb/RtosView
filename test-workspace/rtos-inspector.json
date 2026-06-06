@@ -35,5 +35,18 @@
       { "label": "Locked",  "expr": "locked" },
       { "label": "Waiters", "expr": "waiters" }
     ]
+  },
+  "timers": {
+    "mode": "array",
+    "root": "g_timers",
+    "count": "g_timer_count",
+    "access": ".",
+    "fields": [
+      { "label": "ID",      "expr": "id" },
+      { "label": "Name",    "expr": "name" },
+      { "label": "Period",  "expr": "period" },
+      { "label": "Elapsed", "expr": "elapsed" },
+      { "label": "Active",  "expr": "active" }
+    ]
   }
 }

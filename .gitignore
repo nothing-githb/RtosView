@@ -1,6 +1,9 @@
 # Local portable toolchain downloaded for building (not part of the project)
 .tools/
 
+# Personal Claude Code overrides
+.claude/settings.local.json
+
 # Node / build artifacts
 node_modules/
 extension/out/

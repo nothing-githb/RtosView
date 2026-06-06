@@ -168,11 +168,12 @@ Extension Development Host.
 
 ## Try the example
 
-Open `test-workspace/` as a folder. It contains `threads_demo.c` (a tiny custom
-TCB/semaphore demo), a matching `rtos-inspector.json`, and
+Open `test-workspace/` as a folder. It contains `threads_demo.c` — a tiny demo
+with four structures: a thread list, a semaphore list and a mutex list (all
+`linked_list`) plus a timer array (`array` mode) — and a matching
+`rtos-inspector.json` with one section per structure, so you see four tabs. The
 `.vscode/{launch,tasks}.example.json` templates (copy to `launch.json`/
-`tasks.json` and set your toolchain path). See the comments in the example launch
-config for Cygwin GDB tips.
+`tasks.json` and set your toolchain path) include Cygwin GDB tips in comments.
 
 ## License
 
