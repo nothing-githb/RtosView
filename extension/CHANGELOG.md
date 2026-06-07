@@ -2,6 +2,14 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.19.1] - 2026-06-06
+
+### Changed
+- In the `index_list` `next` template, `${expr}` now resolves to the
+  **un-wrapped** element — the same `${expr}` that `wrap` receives — so the
+  placeholder means the same thing in both places. (Previously `next`'s `${expr}`
+  was the post-`wrap` element.)
+
 ## [0.19.0] - 2026-06-06
 
 ### Added

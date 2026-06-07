@@ -248,9 +248,12 @@ With the chain `0 → 2 → 5` this shows three rows; slots `1/3/4` are skipped
 because they are not on the chain.
 
 If the next index isn't a plain field, `next` may be a **`${expr}` template**
-(like `wrap`) where `${expr}` is the element — e.g. `"next": "${expr}.link.idx"`,
-or a lookup `"next": "g_succ[${expr}.id]"`. Without `${expr}` it stays the simple
-`element<access>next`.
+(like `wrap`) — e.g. `"next": "${expr}.link.idx"`, or a lookup
+`"next": "g_succ[${expr}.id]"`. Here `${expr}` is the **un-wrapped** element — the
+**same** `${expr}` that `wrap` receives — so it means the same thing in both
+places; if you also `cast`/`wrap` to read fields, re-apply that inside the `next`
+template. Without `${expr}`, `next` stays the simple `element<access>next` (using
+the wrapped element).
 
 ---
 

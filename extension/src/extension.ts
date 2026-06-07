@@ -288,18 +288,19 @@ async function collectSection(
       if (seen[idx]) { reason = `cycle (idx ${idx} already visited)`; break; }
       seen[idx] = true;
       const fromIdx = idx;
-      // eleman: base[idx]; field'a erişmeden ÖNCE wrap ile sarmalanır
-      let elem = `${base}[${idx}]`;
-      if (cfg.wrap) elem = '(' + cfg.wrap.split('${expr}').join('(' + elem + ')') + ')'; // çıktıyı sar: (wrap)<access>field
+      // ham eleman: ${expr} HEM wrap HEM next şablonunda AYNI bunu görür
+      const elemRaw = `${base}[${idx}]`;
+      // field'a erişmeden ÖNCE wrap ile sarmalanır (çıktı parantezlenir: (wrap)<access>field)
+      const elem = cfg.wrap ? '(' + cfg.wrap.split('${expr}').join('(' + elemRaw + ')') + ')' : elemRaw;
       const row: Row = {};
       for (const f of cfg.fields) {
         const v = await gdbExec(session, `print ${elem}${access}${f.expr}`, frameId);
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
-      // next: ${expr} (eleman) içeren bir şablon olabilir (wrap gibi); yoksa elem<access>next
+      // next: ${expr} (ham eleman, wrap ile aynı) içeren bir şablon olabilir; yoksa elem<access>next
       const nextExpr = (cfg.next && cfg.next.indexOf('${expr}') !== -1)
-        ? cfg.next.split('${expr}').join('(' + elem + ')')
+        ? cfg.next.split('${expr}').join('(' + elemRaw + ')')
         : `${elem}${access}${cfg.next}`;
       const nxRaw = cleanValue(await gdbExec(session, `print ${nextExpr}`, frameId));
       idx = toI(nxRaw);
