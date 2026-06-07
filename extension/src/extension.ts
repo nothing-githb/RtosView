@@ -192,12 +192,26 @@ async function gdbExec(
 }
 
 // "$N = VALUE" -> "VALUE"; "(gdb) " prompt gürültüsüne de dayanıklı
+// Sabit boyutlu char dizileri: GDB sondaki NUL'lari da basar ("abc\000\000" veya
+// "abc", '\000' <repeats N times>). Sadece ilk \000'a kadarini goster, gerisini at.
+function trimCString(s: string): string {
+  const t = s.trim();
+  if (/^'\\000'(\s*<repeats\s+\d+\s+times>)?$/.test(t)) return '""';        // tamamen NUL -> bos
+  const m = t.match(/^"((?:[^"\\]|\\.)*)"/);                                 // bastaki tirnakli string
+  if (m) {
+    const nul = m[1].indexOf('\\000');
+    if (nul !== -1) return '"' + m[1].slice(0, nul) + '"';                   // ilk NUL'da kes
+    if (t.length > m[0].length) return m[0];                                 // tirnak sonrasi <repeats>/NUL'lari at
+  }
+  return s;
+}
+
 function cleanValue(raw: string): string {
   let s = (raw ?? '').toString().trim();
   s = s.replace(/\(gdb\)\s*/g, ' ').trim();
   const m = s.match(/\$\d+\s*=\s*([\s\S]*)$/);
   if (m) s = m[1];
-  return s.trim();
+  return trimCString(s.trim());
 }
 
 function isNull(v: string): boolean {

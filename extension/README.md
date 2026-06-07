@@ -253,7 +253,7 @@ Each slot of `box_t g_boxes[3]` is `{ void *data; int kind }` and `data` holds a
 
 ### Notes on `expr` and rendering
 
-You never declare types or sizes. Whatever `expr` evaluates to is formatted by GDB according to its type: enums render as names (`RUNNING`, `FIFO`), pointers as addresses, integers as numbers. A value GDB cannot read (an inaccessible address, an error such as `optimized out`) or a NULL pointer (`0x0`) is shown as a muted `-`; a plain integer `0` is shown as `0` (and keeps styling such as a red `Count`).
+You never declare types or sizes. Whatever `expr` evaluates to is formatted by GDB according to its type: enums render as names (`RUNNING`, `FIFO`), pointers as addresses, integers as numbers. A fixed-size `char` array is shown only up to the first `\0` — the trailing NULs GDB prints (`"abc\000\000"` or `"abc", '\000' <repeats N times>`) are dropped, so you just see `"abc"`. A value GDB cannot read (an inaccessible address, an error such as `optimized out`) or a NULL pointer (`0x0`) is shown as a muted `-`; a plain integer `0` is shown as `0` (and keeps styling such as a red `Count`).
 
 ## Settings
 

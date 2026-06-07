@@ -58,8 +58,10 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
 - **Read-only & safe** — it only *reads* your globals via `print`, and never
   calls your functions. The only `set` commands it issues target its own
   `$`-prefixed GDB convenience-variable cursors, never your memory.
-- **Tidy empties** — an unreadable/inaccessible value or a NULL pointer (`0x0`)
-  shows as a muted `-`; a plain integer `0` stays `0`.
+- **Tidy strings & empties** — fixed-size `char` arrays are shown only up to the
+  first `\0` (trailing NULs / `'\000' <repeats N times>` dropped); an
+  unreadable/inaccessible value or a NULL pointer (`0x0`) shows as a muted `-`;
+  a plain integer `0` stays `0`.
 - **Leveled, color-coded logs** — a *Debug Inspector* Output channel (rendered
   with the `log` language so timestamps/severities are colorized); pick `off` /
   `info` / `debug`.

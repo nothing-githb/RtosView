@@ -116,6 +116,7 @@
     "fields": [
       { "label": "ID",   "expr": "id" },
       { "label": "Name", "expr": "name" },
+      { "label": "Tag",  "expr": "tag" },
       { "label": "Next", "expr": "next" }
     ]
   },

@@ -59,6 +59,7 @@ typedef struct {
 typedef struct {
     int          id;
     const char  *name;
+    char         tag[8];  /* sabit boyutlu char dizisi: GDB sondaki \000'lari da basar */
     int          next;   /* sonraki elemanin index'i; -1 = son */
 } slot_t;
 
@@ -160,6 +161,13 @@ static void mk_timer(int id, const char *name, int period, int elapsed, int acti
     t->id = id; t->name = name; t->period = period; t->elapsed = elapsed; t->active = active;
 }
 
+static void set_tag(char *dst, const char *src)  /* mini strcpy (max 7 char) */
+{
+    int i = 0;
+    while (src[i] && i < 7) { dst[i] = src[i]; i++; }
+    dst[i] = 0;
+}
+
 static process_t *mk_proc(int pid, const char *name, tcb_t *threads, ksem_t *sems, kmutex_t *mutexes)
 {
     process_t *p = &g_procs[g_proc_count++];
@@ -224,6 +232,11 @@ int main(void)
     g_slot_pool[1].id = 201; g_slot_pool[1].name = "w-a";   g_slot_pool[1].next = 3;
     g_slot_pool[3].id = 202; g_slot_pool[3].name = "w-b";   g_slot_pool[3].next = -1;
     /* goz 4 bos kalir */
+    set_tag(g_slot_pool[0].tag, "alpha");    /* "alpha" + sondaki \000'lar */
+    set_tag(g_slot_pool[2].tag, "beta");
+    set_tag(g_slot_pool[5].tag, "gamma");
+    set_tag(g_slot_pool[1].tag, "longtag");  /* 7 char: tam dolu, trailing NUL yok */
+    set_tag(g_slot_pool[3].tag, "w-b");
 
     /* master liste: 2 process, her biri kendi alt listeleriyle */
     process_t *p0 = mk_proc(1, "init",   a, s0, m0);

@@ -2,6 +2,15 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.19.3] - 2026-06-06
+
+### Changed
+- Fixed-size `char` arrays are now shown only up to the first `\0`. GDB renders
+  the whole buffer (`"abc\000\000"` or `"abc", '\000' <repeats N times>`); the
+  trailing NULs / repeat counts are dropped, and an all-NUL array shows as `""`.
+  Applied at read time, so sorting/summaries/change-detection see the clean
+  string. The demo's `pool` gains a `Tag` (`char[8]`) column.
+
 ## [0.19.2] - 2026-06-06
 
 ### Added
