@@ -1,8 +1,8 @@
 {
   "name": "rtos-inspector",
-  "displayName": "RTOS Inspector",
+  "displayName": "Debug Inspector",
   "description": "Visualize your own C/C++ data structures — threads, semaphores, mutexes, queues, linked lists, any struct collection — as live, sortable tables while debugging with GDB. Config-driven and read-only.",
-  "version": "0.13.2",
+  "version": "0.14.0",
   "publisher": "HALISTAHASAHIN",
   "license": "MIT",
   "icon": "icon.png",
@@ -53,15 +53,15 @@
     "commands": [
       {
         "command": "rtosInspector.open",
-        "title": "RTOS Inspector: Open Panel"
+        "title": "Debug Inspector: Open Panel"
       },
       {
         "command": "rtosInspector.showLog",
-        "title": "RTOS Inspector: Show Log"
+        "title": "Debug Inspector: Show Log"
       }
     ],
     "configuration": {
-      "title": "RTOS Inspector",
+      "title": "Debug Inspector",
       "properties": {
         "rtosInspector.configPath": {
           "type": "string",

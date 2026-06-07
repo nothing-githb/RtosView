@@ -1,8 +1,8 @@
-# RTOS Inspector
+# Debug Inspector
 
 **Visualize your own C/C++ data structures as live tables while debugging with GDB.**
 
-RTOS Inspector turns the in-memory data structures of *your* program — linked
+Debug Inspector turns the in-memory data structures of *your* program — linked
 lists and arrays of structs such as thread control blocks, semaphores, mutexes,
 ready/blocked queues, timers, memory free-lists, or any node list — into clean,
 sortable tables in a VS Code panel, refreshed every time the debugger stops.
@@ -53,7 +53,7 @@ by hand in the debugger.
   choice is remembered per workspace.
 - **Read-only & safe** — only *reads* globals; never calls functions, so program
   state is never disturbed.
-- **Leveled logs** — an *RTOS Inspector* Output channel logs at
+- **Leveled logs** — an *Debug Inspector* Output channel logs at
   trace/debug/info/warn/error; at `trace` every GDB query and result is shown.
 
 ## Requirements
@@ -72,7 +72,7 @@ by hand in the debugger.
 
 1. Debug your C/C++ program with `cppdbg` (GDB).
 2. Put a `rtos-inspector.json` at your workspace root (see the schema below).
-3. Run **“RTOS Inspector: Open Panel”** from the Command Palette.
+3. Run **“Debug Inspector: Open Panel”** from the Command Palette.
 4. When you hit a breakpoint the panel fills in; on `continue` it shows
    "running…" and refreshes again on the next stop.
 
@@ -207,7 +207,7 @@ pointer type and `access` to `"->"`.
 
 ## How it works
 
-RTOS Inspector registers a debug adapter tracker for the configured debug types and
+Debug Inspector registers a debug adapter tracker for the configured debug types and
 listens for `stopped`/`continued` events. On stop it grabs the top stack frame
 and issues `-exec print …` commands through the debug adapter's `evaluate`
 request, cleaning GDB's `$N =` / prompt noise from the output. Linked lists are
@@ -248,7 +248,7 @@ GDB tips in comments.
 
 ## Troubleshooting
 
-Open **View → Output → "RTOS Inspector"** (or run **"RTOS Inspector: Show Log"**)
+Open **View → Output → "Debug Inspector"** (or run **"Debug Inspector: Show Log"**)
 to see what the extension is doing. Raise the level with the gear icon or
 **"Developer: Set Log Level…"**: `debug` shows per-section row counts/columns, the
 resolved `${selected}`, and **every prepared GDB access string**; `trace` adds

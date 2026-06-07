@@ -1,8 +1,8 @@
-# RTOS Inspector
+# Debug Inspector
 
 **Visualize your own C/C++ data structures as live tables while debugging with GDB.**
 
-When your GDB (`cppdbg`) session stops, RTOS Inspector walks the data structures
+When your GDB (`cppdbg`) session stops, Debug Inspector walks the data structures
 *you* describe — linked lists and arrays of structs such as thread control
 blocks, semaphores, mutexes, ready/blocked queues, timers, free-lists, or any
 node list — and renders them as clean, sortable tables in a tabbed panel.
@@ -15,7 +15,7 @@ by hand in the debugger.
 
 ## Features
 
-- **Config-driven.** Point RTOS Inspector at any global expression; it does not
+- **Config-driven.** Point Debug Inspector at any global expression; it does not
   assume any layout. No code changes to your program.
 - **Two traversal modes.**
   - `linked_list` — start at a head pointer, follow a `next` field until NULL.
@@ -43,12 +43,12 @@ by hand in the debugger.
 - **Master–detail.** A section whose `root` contains `${selected}` becomes a
   detail table; click a row in a master section (e.g. a process) to populate it
   with that element's lists. The first master row is auto-selected.
-- **Read-only & safe.** RTOS Inspector only *reads* globals — it never calls
+- **Read-only & safe.** Debug Inspector only *reads* globals — it never calls
   functions, so your program state is never disturbed.
-- **Leveled logging.** An *RTOS Inspector* Output channel logs at
+- **Leveled logging.** An *Debug Inspector* Output channel logs at
   trace/debug/info/warn/error (set the level via the gear or
   "Developer: Set Log Level…"); `trace` shows every GDB command and result. Run
-  "RTOS Inspector: Show Log" to open it.
+  "Debug Inspector: Show Log" to open it.
 - **Readable UI.** Recognized columns get automatic styling: a `State` column
   becomes a colored badge (RUNNING / READY / BLOCKED / WAITING), a `Count` of `0`
   is flagged red and `Waiting > 0` amber, with a summary line per tab.
@@ -63,7 +63,7 @@ by hand in the debugger.
 
 1. Debug your C/C++ program with `cppdbg` (GDB).
 2. Put a `rtos-inspector.json` at your workspace root (see the schema below).
-3. Run **“RTOS Inspector: Open Panel”** from the Command Palette.
+3. Run **“Debug Inspector: Open Panel”** from the Command Palette.
 4. When you hit a breakpoint the panel fills in; on `continue` it shows
    "running…", and it refreshes again on the next stop. Each config section gets
    its own tab at the top.
@@ -207,7 +207,7 @@ A section can set `wrap` to transform each **element** before its fields are rea
 
 ## How it works
 
-RTOS Inspector registers a debug adapter tracker for the configured debug types and
+Debug Inspector registers a debug adapter tracker for the configured debug types and
 listens for `stopped`/`continued` events. On stop, it grabs the top stack frame
 and issues `-exec print …` commands through the debug adapter's `evaluate`
 request, cleaning GDB's `$N =` / prompt noise from the output. Linked lists are

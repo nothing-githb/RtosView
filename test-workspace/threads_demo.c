@@ -1,5 +1,5 @@
 /*
- * threads_demo.c  —  RTOS Inspector test program
+ * threads_demo.c  —  Debug Inspector test program
  * Standart kutuphane KULLANMAZ: include satiri yok, printf/malloc vb. yok.
  * Tum veriler statik global'lerde; pthread degil, kendi TCB/semaphore
  * yapilarimiz var. Listeye karmasik bir root uzerinden erisilir:

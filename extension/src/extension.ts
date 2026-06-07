@@ -51,9 +51,9 @@ export function activate(context: vscode.ExtensionContext) {
   columnPrefs = context.workspaceState.get<Record<string, ColPref>>(COLPREF_KEY) ?? {};
   paused = context.workspaceState.get<boolean>(PAUSED_KEY) ?? false;
 
-  log = vscode.window.createOutputChannel('RTOS Inspector', { log: true });
+  log = vscode.window.createOutputChannel('Debug Inspector', { log: true });
   context.subscriptions.push(log);
-  log.info('RTOS Inspector activated');
+  log.info('Debug Inspector activated');
 
   context.subscriptions.push(
     vscode.commands.registerCommand('rtosInspector.open', () => {
@@ -189,7 +189,7 @@ function loadConfig(): SyncCfg | undefined {
     return JSON.parse(text) as SyncCfg;
   } catch (e: any) {
     log?.warn(`could not read/parse config: ${file} — ${e?.message ?? e}`);
-    vscode.window.showWarningMessage(`RTOS Inspector: could not read config (${file})`);
+    vscode.window.showWarningMessage(`Debug Inspector: could not read config (${file})`);
     return undefined;
   }
 }
@@ -422,7 +422,7 @@ async function refresh(session: vscode.DebugSession, threadId: number) {
 function openPanel(context: vscode.ExtensionContext) {
   if (panel) { panel.reveal(vscode.ViewColumn.Beside); return; }
   panel = vscode.window.createWebviewPanel(
-    'rtosInspector', 'RTOS Inspector', vscode.ViewColumn.Beside,
+    'rtosInspector', 'Debug Inspector', vscode.ViewColumn.Beside,
     { enableScripts: true, retainContextWhenHidden: true }
   );
   panel.onDidDispose(() => { panel = undefined; }, null, context.subscriptions);
@@ -606,7 +606,7 @@ function getHtml(): string {
 </head>
 <body>
   <div class="topbar">
-    <h1>RTOS Inspector</h1>
+    <h1>Debug Inspector</h1>
     <span id="status" class="pill">—</span>
     <span id="changes" class="pill chg hidden"></span>
     <span class="grow"></span>

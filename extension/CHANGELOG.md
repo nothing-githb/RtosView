@@ -1,6 +1,14 @@
 # Change Log
 
-All notable changes to the **RTOS Inspector** extension are documented here.
+All notable changes to the **Debug Inspector** extension are documented here.
+
+## [0.14.0] - 2026-06-06
+
+### Changed
+- Renamed the display name to **Debug Inspector** (the extension id
+  `rtos-inspector`, command/settings namespaces and config file name are
+  unchanged).
+- New icon: rows with status dots plus a magnifier.
 
 ## [0.13.2] - 2026-06-06
 
@@ -50,11 +58,11 @@ All notable changes to the **RTOS Inspector** extension are documented here.
 ## [0.11.0] - 2026-06-06
 
 ### Added
-- **Leveled logging** to an *RTOS Inspector* Output channel
+- **Leveled logging** to an *Debug Inspector* Output channel
   (trace / debug / info / warn / error). Pick the level from the Output panel's
   gear or via "Developer: Set Log Level…". At `trace`, every GDB command and its
   result is logged; `debug` shows section/column/selection activity. A new
-  command **"RTOS Inspector: Show Log"** opens the channel.
+  command **"Debug Inspector: Show Log"** opens the channel.
 
 ## [0.10.0] - 2026-06-06
 
