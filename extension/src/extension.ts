@@ -40,7 +40,28 @@ interface ColPref { order: string[]; hidden: string[]; }
 // ---------------------------------------------------------------------------
 let panel: vscode.WebviewPanel | undefined;
 let lastStopped: { session: vscode.DebugSession; threadId: number } | undefined;
-let log: vscode.LogOutputChannel;          // Output: seviyeli loglar (trace/debug/info/warn/error)
+// Output: config-driven seviyeli logger (rtosInspector.logLevel)
+const LOG_LEVELS: Record<string, number> = { trace: 10, debug: 20, info: 30, warn: 40, error: 50, off: 100 };
+let logChannel: vscode.OutputChannel | undefined;
+let logThreshold = LOG_LEVELS.info;
+function readLogLevel(): number {
+  const v = String(vscode.workspace.getConfiguration('rtosInspector').get('logLevel') ?? 'info').toLowerCase();
+  return LOG_LEVELS[v] ?? LOG_LEVELS.info;
+}
+function emit(sev: number, tag: string, msg: string) {
+  if (!logChannel || sev < logThreshold) return;
+  const d = new Date();
+  const t = d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  logChannel.appendLine(`[${t}] [${tag.padEnd(5)}] ${msg}`);
+}
+const log = {
+  trace: (m: string) => emit(LOG_LEVELS.trace, 'trace', m),
+  debug: (m: string) => emit(LOG_LEVELS.debug, 'debug', m),
+  info:  (m: string) => emit(LOG_LEVELS.info, 'info', m),
+  warn:  (m: string) => emit(LOG_LEVELS.warn, 'warn', m),
+  error: (m: string) => emit(LOG_LEVELS.error, 'error', m),
+  show:  () => logChannel?.show()
+};
 let configWatcher: vscode.FileSystemWatcher | undefined;
 let extContext: vscode.ExtensionContext | undefined;
 let columnPrefs: Record<string, ColPref> = {};
@@ -58,9 +79,10 @@ export function activate(context: vscode.ExtensionContext) {
   columnPrefs = context.workspaceState.get<Record<string, ColPref>>(COLPREF_KEY) ?? {};
   paused = context.workspaceState.get<boolean>(PAUSED_KEY) ?? false;
 
-  log = vscode.window.createOutputChannel('Debug Inspector', { log: true });
-  context.subscriptions.push(log);
-  log.info('Debug Inspector activated');
+  logChannel = vscode.window.createOutputChannel('Debug Inspector');
+  logThreshold = readLogLevel();
+  context.subscriptions.push(logChannel);
+  log.info(`Debug Inspector activated (log level: ${vscode.workspace.getConfiguration('rtosInspector').get('logLevel') ?? 'info'})`);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('rtosInspector.open', () => {
@@ -102,6 +124,10 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('rtosInspector.configPath')) setupConfigWatcher(context);
+      if (e.affectsConfiguration('rtosInspector.logLevel')) {
+        logThreshold = readLogLevel();
+        log.info(`log level changed: ${vscode.workspace.getConfiguration('rtosInspector').get('logLevel') ?? 'info'}`);
+      }
     })
   );
 }
@@ -208,7 +234,8 @@ async function collectSection(
   session: vscode.DebugSession,
   cfg: SectionCfg,
   frameId: number | undefined,
-  cursor: string
+  cursor: string,
+  name: string = ''
 ): Promise<Row[]> {
   const rows: Row[] = [];
   const max = cfg.max ?? 1024;
@@ -219,6 +246,7 @@ async function collectSection(
     const base = cfg.cast ? `((${cfg.cast})(${cfg.root}))` : `(${cfg.root})`;
     const countRaw = await gdbExec(session, `print ${cfg.count}`, frameId);
     const count = parseInt(cleanValue(countRaw), 10) || 0;
+    log.debug(`array "${name}": count(${cfg.count})="${cleanValue(countRaw)}" → ${count}; element = ${base}[i]${access}<field>, access="${access}"`);
     for (let i = 0; i < Math.min(count, max); i++) {
       // eleman: ((cast*)root)[i]; field'a erişmeden ÖNCE wrap ile sarmalanır
       let elem = `${base}[${i}]`;
@@ -243,11 +271,19 @@ async function collectSection(
       return m ? parseInt(m[0], 10) : NaN;
     };
     const nilNum = toI(cfg.nil ?? '-1');
-    let idx = toI(cleanValue(await gdbExec(session, `print ${cfg.head}`, frameId)));
+    const headRaw = cleanValue(await gdbExec(session, `print ${cfg.head}`, frameId));
+    let idx = toI(headRaw);
+    log.debug(`index_list "${name}": head(${cfg.head})="${headRaw}" → idx ${idx}; element = ${base}[idx], next via ${base}[idx]${access}${cfg.next}, nil=${nilNum}`);
     const seen: Record<number, boolean> = {};
     let guard = 0;
-    while (guard++ < max && Number.isFinite(idx) && idx !== nilNum && !seen[idx]) {
+    let reason = 'end';
+    while (true) {
+      if (guard++ >= max) { reason = `max bound (${max})`; break; }
+      if (!Number.isFinite(idx)) { reason = 'non-numeric index'; break; }
+      if (idx === nilNum) { reason = `reached nil (${nilNum})`; break; }
+      if (seen[idx]) { reason = `cycle (idx ${idx} already visited)`; break; }
       seen[idx] = true;
+      const fromIdx = idx;
       // eleman: base[idx]; field'a erişmeden ÖNCE wrap ile sarmalanır
       let elem = `${base}[${idx}]`;
       if (cfg.wrap) elem = cfg.wrap.split('${expr}').join('(' + elem + ')');
@@ -257,14 +293,21 @@ async function collectSection(
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
-      idx = toI(cleanValue(await gdbExec(session, `print ${elem}${access}${cfg.next}`, frameId)));
+      const nextExpr = `${elem}${access}${cfg.next}`;
+      const nxRaw = cleanValue(await gdbExec(session, `print ${nextExpr}`, frameId));
+      idx = toI(nxRaw);
+      log.trace(`index_list "${name}" step ${guard - 1}: idx ${fromIdx} → next [ ${nextExpr} ] = "${nxRaw}" → idx ${idx}`);
     }
+    log.debug(`index_list "${name}": ${rows.length} row(s); stopped: ${reason}`);
   } else {
+    log.debug(`linked_list "${name}": root=${cfg.root}, advance via cursor->${cfg.next}, access="->"`);
     await gdbExec(session, `set ${cursor} = ${cfg.root}`, frameId);
     let guard = 0;
-    while (guard++ < max) {
+    let reason = 'end';
+    while (true) {
+      if (guard++ >= max) { reason = `max bound (${max})`; break; }
       const cur = cleanValue(await gdbExec(session, `print ${cursor}`, frameId));
-      if (isNull(cur)) break;
+      if (isNull(cur)) { reason = 'reached NULL'; break; }
       // node (cursor); field'a erişmeden ÖNCE wrap ile sarmalanır
       let elem = cursor;
       if (cfg.wrap) elem = cfg.wrap.split('${expr}').join('(' + cursor + ')');
@@ -274,8 +317,10 @@ async function collectSection(
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
+      log.trace(`linked_list "${name}" node ${guard - 1}: cursor=${cur} → advance via ${cursor}->${cfg.next}`);
       await gdbExec(session, `set ${cursor} = ${cursor}->${cfg.next}`, frameId);
     }
+    log.debug(`linked_list "${name}": ${rows.length} row(s); stopped: ${reason}`);
   }
   return rows;
 }
@@ -350,7 +395,7 @@ async function buildSection(
   const effFields = eff.active
     .map(l => cfg.fields.find(f => f.label === l))
     .filter((f): f is FieldCfg => !!f);
-  const rows = await collectSection(session, { ...cfg, fields: effFields }, frameId, cursor);
+  const rows = await collectSection(session, { ...cfg, fields: effFields }, frameId, cursor, name);
   log?.debug(`section "${name}" (${cfg.mode}, root=${cfg.root}): ${rows.length} row(s); active=[${eff.active.join(', ')}]`);
   return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows) };
 }
@@ -421,7 +466,7 @@ async function buildGrouped(
       root: substituteMaster(scfg.root, selExpr),
       count: scfg.count ? substituteMaster(scfg.count, selExpr) : scfg.count
     };
-    const rows = await collectSection(session, subCfg, frameId, '$rg_' + i + '_' + mi);
+    const rows = await collectSection(session, subCfg, frameId, '$rg_' + i + '_' + mi, name);
     const key = rowKeyAt(m.sec, mi) ?? String(mi);
     const label = m.cfg.label
       ? nodeLabel(cleanValue(await gdbExec(session, `print (${selExpr})${masterAcc}${m.cfg.label}`, frameId)))

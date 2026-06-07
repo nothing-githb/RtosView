@@ -2,6 +2,22 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.17.0] - 2026-06-06
+
+### Added
+- **`rtosInspector.logLevel` setting** — choose the Output channel verbosity
+  (`off`/`error`/`warn`/`info`/`debug`/`trace`) from settings; applied live on
+  change. (Replaces reliance on the VS Code log-level gear.)
+
+### Changed
+- **More detailed, leveled logging.** At `debug`, each section logs its resolved
+  traversal: the element expression and the **next-access** expression
+  (`linked_list` → `cursor->next`; `index_list` → `root[idx].next`; `array` →
+  element/access). At `trace`, every traversal **step** is logged — for
+  `index_list` each hop shows `idx → next [ root[idx].next ] = "v" → idx N`, and
+  `linked_list` logs each node's cursor and advance. Stop reasons (NULL / nil /
+  cycle / max) are logged too.
+
 ## [0.16.0] - 2026-06-06
 
 ### Added

@@ -59,8 +59,9 @@ by hand in the debugger.
   state is never disturbed.
 - **Tidy empties** — an unreadable/inaccessible value or a NULL pointer (`0x0`)
   shows as a muted `-` (a plain integer `0` stays `0`).
-- **Leveled logs** — an *Debug Inspector* Output channel logs at
-  trace/debug/info/warn/error; at `trace` every GDB query and result is shown.
+- **Leveled logs** — an *Debug Inspector* Output channel; pick the level with the
+  `rtosInspector.logLevel` setting. At `trace` every GDB query/result and each
+  traversal step (e.g. how `next` is resolved at each hop) is shown.
 
 ## Requirements
 
@@ -263,6 +264,7 @@ against cycles. Write `nil` as GDB prints the index (usually decimal).
 | Setting                | Default          | Description |
 |------------------------|------------------|-------------|
 | `rtosInspector.configPath` | `rtos-inspector.json` | Config file path: **absolute**, or relative to the workspace root. |
+| `rtosInspector.logLevel`   | `info`           | Output channel verbosity: `off`/`error`/`warn`/`info`/`debug`/`trace`. |
 | `rtosInspector.debugTypes` | `["cppdbg"]`     | Debug adapter types the tracker attaches to. |
 
 ## How it works
@@ -309,11 +311,16 @@ GDB tips in comments.
 ## Troubleshooting
 
 Open **View → Output → "Debug Inspector"** (or run **"Debug Inspector: Show Log"**)
-to see what the extension is doing. Raise the level with the gear icon or
-**"Developer: Set Log Level…"**: `debug` shows per-section row counts/columns, the
-resolved `${selected}`, and **every prepared GDB access string**; `trace` adds
-each command's result. Access failures are logged as warnings (visible at
-`info`) — handy when a column is empty or a `root`/`cast` doesn't resolve.
+to see what the extension is doing. Set the level with the **`rtosInspector.logLevel`**
+setting (`off`/`error`/`warn`/`info`/`debug`/`trace`):
+
+- `debug` — per-section row counts/columns, the resolved `${selected}`/`${master}`,
+  **every prepared GDB access string**, and each section's resolved traversal
+  (element + the **next-access** expression, e.g. `root[idx].next`).
+- `trace` — adds each command's result and a line per traversal **step** (for
+  `index_list`, each hop: `idx → next [ root[idx].next ] = "v" → idx N`).
+- Access failures are logged as warnings (visible at `info`) — handy when a
+  column is empty or a `root`/`cast`/`next` doesn't resolve.
 
 ## License
 
