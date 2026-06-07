@@ -723,14 +723,15 @@ function getHtml(): string {
     cursor: pointer; user-select: none;
   }
   th:hover { background: var(--vscode-list-hoverBackground); }
-  th.sorted { color: var(--vscode-focusBorder, #3b9eff); }
+  th.sorted { background: rgba(59,158,255,0.22); color: var(--vscode-foreground); }
+  tbody td.sortcol { background: rgba(59,158,255,0.07); }
   th.dragging { opacity: 0.4; }
   th.drop-target {
     box-shadow: inset 4px 0 0 #3b9eff;
     background: rgba(59,158,255,0.22) !important;
   }
   th[draggable="true"] { cursor: pointer; }
-  .sort-ind { font-size: 10px; opacity: 0.9; }
+  .sort-ind { font-size: 11px; margin-left: 4px; color: #3b9eff; font-weight: 700; }
   tbody tr:nth-child(even) td { background: rgba(128,128,128,0.05); }
   tbody tr:hover td { background: var(--vscode-list-hoverBackground); }
   td.mono { font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; opacity: 0.95; }
@@ -1098,15 +1099,18 @@ function getHtml(): string {
     const numCols = opts.numCols || {};
     const colBase = opts.colBase || {};
     const bars = opts.bars || {};
+    const sortCol = opts.sortCol;
     const rk = rowKeyOf(row, columns);
     let h = '<tr>';
     for (const c of columns) {
       const ck = rk + '\\u0000' + c;
       const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
+      const isSort = c === sortCol;
       const raw = row[c] ?? '';
       if (bars[c]) {   // kullanım çubuğu
         const inner = barCell(toIntVal(raw), toIntVal(row['__bar__' + c]), bars[c]);
-        h += '<td' + (isChg ? ' class="changed"' : '') + ' title="' + esc(raw + ' / ' + (row['__bar__' + c] || '?')) + '">' + inner + '</td>';
+        const bc = ((isChg ? 'changed ' : '') + (isSort ? 'sortcol' : '')).trim();
+        h += '<td' + (bc ? ' class="' + bc + '"' : '') + ' title="' + esc(raw + ' / ' + (row['__bar__' + c] || '?')) + '">' + inner + '</td>';
         continue;
       }
       const b = colBase[c] || 'raw';
@@ -1115,6 +1119,7 @@ function getHtml(): string {
       if (isMono(c)) classes.push('mono');
       if (numCols[c]) classes.push('num');
       if (isChg) classes.push('changed');
+      if (isSort) classes.push('sortcol');
       const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
       let inner = cell(c, disp);
       if (isChg) {
@@ -1167,7 +1172,7 @@ function getHtml(): string {
     const allRows = grouped ? st.sec.groups.reduce((a, g) => a.concat(g.rows), []) : st.sec.rows;
     const numCols = numericCols(cols, allRows);
     st.numCols = numCols;   // ▦ Columns menüsü per-kolon base düğmesi için kullanır
-    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {} };
+    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {}, sortCol: st.sortCol };
     const summary = '<div class="summary">' + esc(st.sec.summary) + '</div>';
     const bar = toolbarHtml(st);
     let table;

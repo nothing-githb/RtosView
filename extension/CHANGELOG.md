@@ -2,6 +2,14 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.23.1] - 2026-06-06
+
+### Fixed
+- The **sorted column was nearly invisible in dark themes** (the header text was
+  recolored to a dim `focusBorder`). The sorted header now keeps full-contrast
+  text on a blue tint, the sort arrow is a fixed bright blue, and the sorted
+  column's cells get a subtle blue highlight.
+
 ## [0.23.0] - 2026-06-06
 
 ### Added
