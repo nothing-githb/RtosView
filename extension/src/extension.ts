@@ -5,11 +5,7 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 // Tipler
 // ---------------------------------------------------------------------------
-interface FieldCfg {
-  label: string;
-  expr: string;
-  wrap?: string;   // üretilen erişim ifadesini sarmala; ${expr} yer tutucu. Örn "*(${expr})"
-}
+interface FieldCfg { label: string; expr: string; }
 interface SectionCfg {
   mode: 'linked_list' | 'array';
   root: string;
@@ -17,6 +13,7 @@ interface SectionCfg {
   count?: string;     // array
   access?: string;    // array eleman erişimi: "." (default) veya "->"
   cast?: string;      // array: void*/generic buffer'ı eleman tipine cast et -> ((cast *)(root))[i]
+  wrap?: string;      // elemanı field'a erişmeden ÖNCE sarmala; ${expr}=eleman. Örn "((T*)${expr})" -> ((T*)(elem))->field
   max?: number;
   fields: FieldCfg[];
 }
@@ -216,11 +213,12 @@ async function collectSection(
     const countRaw = await gdbExec(session, `print ${cfg.count}`, frameId);
     const count = parseInt(cleanValue(countRaw), 10) || 0;
     for (let i = 0; i < Math.min(count, max); i++) {
+      // eleman: ((cast*)root)[i]; field'a erişmeden ÖNCE wrap ile sarmalanır
+      let elem = `${base}[${i}]`;
+      if (cfg.wrap) elem = cfg.wrap.split('${expr}').join('(' + elem + ')');
       const row: Row = {};
       for (const f of cfg.fields) {
-        let fe = `${base}[${i}]${access}${f.expr}`;
-        if (f.wrap) fe = f.wrap.split('${expr}').join(fe);   // post-process, örn *(${expr})
-        const v = await gdbExec(session, `print ${fe}`, frameId);
+        const v = await gdbExec(session, `print ${elem}${access}${f.expr}`, frameId);
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
@@ -231,11 +229,12 @@ async function collectSection(
     while (guard++ < max) {
       const cur = cleanValue(await gdbExec(session, `print ${cursor}`, frameId));
       if (isNull(cur)) break;
+      // node (cursor); field'a erişmeden ÖNCE wrap ile sarmalanır
+      let elem = cursor;
+      if (cfg.wrap) elem = cfg.wrap.split('${expr}').join('(' + cursor + ')');
       const row: Row = {};
       for (const f of cfg.fields) {
-        let fe = `${cursor}->${f.expr}`;
-        if (f.wrap) fe = f.wrap.split('${expr}').join(fe);   // post-process, örn *(${expr})
-        const v = await gdbExec(session, `print ${fe}`, frameId);
+        const v = await gdbExec(session, `print ${elem}->${f.expr}`, frameId);
         row[f.label] = cleanValue(v);
       }
       rows.push(row);

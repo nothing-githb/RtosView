@@ -83,6 +83,7 @@ name). Each section uses the same fields:
 | `count`  | *(array)* expression yielding the element count |
 | `access` | *(array)* element field access: `"."` (default) or `"->"` (pointer array) |
 | `cast`   | *(array)* element type for a generic `void*` buffer → `((cast *)(root))[i]` |
+| `wrap`   | wrap the **element** before field access; `${expr}` = the element → `wrap(elem)<access>field` |
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
 
@@ -192,10 +193,10 @@ You don't declare types or sizes. Whatever `expr` evaluates to is formatted by
 GDB according to its type: enums render as names (`RUNNING`, `FIFO`), pointers
 as addresses, integers as numbers.
 
-A field may also set a `wrap` template to post-process the generated access
-expression (`${expr}` is that expression). For example
-`{ "label": "Val", "expr": "p", "wrap": "*(${expr})" }` dereferences a pointer
-field.
+A section can set `wrap` to transform each **element** before its fields are read
+(`${expr}` is the element). For an array of pointers behind a `void*`, use
+`"wrap": "((widget_t *)${expr})"` with `"access": "->"` → each element is read as
+`((widget_t *)(slots[i]))->field`.
 
 ## Extension settings
 

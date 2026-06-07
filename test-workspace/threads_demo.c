@@ -48,7 +48,6 @@ typedef struct {
     int          x;
     int          y;
     const char  *label;
-    int         *xp;       /* &x — 'wrap' (*(${expr})) deref örneği için */
 } widget_t;
 
 typedef struct {
@@ -106,6 +105,7 @@ process_t *g_process_list;   /* master listenin başı */
 #define MAX_WIDGETS 4
 widget_t    g_widget_pool[MAX_WIDGETS];   /* arka depo */
 dyn_array_t g_widgets;                    /* data = void*, widget_t[] gösterir */
+void       *g_slots[3];                   /* void* pointer dizisi -> her biri widget_t* (wrap örneği) */
 
 kpool_t  g_pool0;
 kernel_t g_kernel;
@@ -186,9 +186,12 @@ int main(void)
     g_widget_pool[0].x = 10; g_widget_pool[0].y = 20; g_widget_pool[0].label = "button";
     g_widget_pool[1].x = 30; g_widget_pool[1].y = 40; g_widget_pool[1].label = "slider";
     g_widget_pool[2].x = 50; g_widget_pool[2].y = 60; g_widget_pool[2].label = "label";
-    for (int wi = 0; wi < 3; wi++) g_widget_pool[wi].xp = &g_widget_pool[wi].x;
     g_widgets.data = g_widget_pool;
     g_widgets.size = 3;
+    /* void* pointer dizisi: her eleman bir widget_t*; erişim için wrap ile cast gerekir */
+    g_slots[0] = &g_widget_pool[0];
+    g_slots[1] = &g_widget_pool[1];
+    g_slots[2] = &g_widget_pool[2];
 
     /* master liste: 2 process, her biri kendi alt listeleriyle */
     process_t *p0 = mk_proc(1, "init",   a, s0, m0);

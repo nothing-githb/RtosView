@@ -2,6 +2,16 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.13.1] - 2026-06-06
+
+### Changed
+- `wrap` is now a **section** option that wraps the **element** (cast + index, or
+  the linked-list node) *before* field access — instead of wrapping the whole
+  field expression. This lets a `void*` element be cast first, e.g.
+  `"wrap": "((widget_t *)${expr})"` with `"access": "->"` →
+  `((widget_t *)(slots[i]))->field`. The demo gains a `void*` pointer-array
+  `slots` section. (Supersedes the per-field `wrap` introduced in 0.13.0.)
+
 ## [0.13.0] - 2026-06-06
 
 ### Added

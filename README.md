@@ -91,13 +91,14 @@ section's JSON key is its tab label (`threads`, `semaphores`, `mutexes`,
 | `count`  | *(array)* expression yielding the element count |
 | `access` | *(array)* element field access: `"."` (default) or `"->"` |
 | `cast`   | *(array)* element type for a generic `void*` buffer → `((cast *)(root))[i]` |
+| `wrap`   | wrap the **element** (before field access); `${expr}` = the element → `wrap(elem)<access>field` |
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
 
-A field may also carry an optional `wrap` template that post-processes the
-generated access expression — `${expr}` is that expression. For example
-`{ "label": "Val", "expr": "p", "wrap": "*(${expr})" }` dereferences a pointer
-field, yielding `*(…->p)`.
+`wrap` transforms each element *before* its fields are read — useful when the
+element itself is a `void*` that must be cast. For an array of pointers
+(`void *slots[]`), `"wrap": "((widget_t *)${expr})"` with `"access": "->"` reads
+each element as `((widget_t *)(slots[i]))->field`.
 
 ### Example `rtos-inspector.json`
 

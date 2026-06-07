@@ -72,8 +72,21 @@
     "fields": [
       { "label": "X",      "expr": "x" },
       { "label": "Y",      "expr": "y" },
-      { "label": "Label",  "expr": "label" },
-      { "label": "X*",     "expr": "xp", "wrap": "*(${expr})" }
+      { "label": "Label",  "expr": "label" }
+    ]
+  },
+
+  "//slots": "void* pointer dizisi: her eleman widget_t*. 'wrap' ile field'a erişmeden ÖNCE cast edilir: ((widget_t*)(g_slots[i]))->x",
+  "slots": {
+    "mode": "array",
+    "root": "g_slots",
+    "count": "3",
+    "wrap": "((widget_t *)${expr})",
+    "access": "->",
+    "fields": [
+      { "label": "X",     "expr": "x" },
+      { "label": "Y",     "expr": "y" },
+      { "label": "Label", "expr": "label" }
     ]
   }
 }
