@@ -41,7 +41,7 @@
     ]
   },
 
-  "//widgets": "void* buffer (g_widgets.data) widget_t[] tutar; 'cast' ile eleman tipine cast edilir, 'count' = size.",
+  "//widgets": "void* buffer (g_widgets.data) widget_t[] tutar; 'cast' ile eleman tipine cast edilir, 'count' = size. Per-kolon sayı tabanı config'den: X hex, Y binary (▦ Columns'tan değiştirilebilir).",
   "widgets": {
     "mode": "array",
     "root": "g_widgets.data",
@@ -49,8 +49,8 @@
     "cast": "widget_t *",
     "access": ".",
     "fields": [
-      { "label": "X",      "expr": "x" },
-      { "label": "Y",      "expr": "y" },
+      { "label": "X",      "expr": "x", "base": "hex" },
+      { "label": "Y",      "expr": "y", "base": "bin" },
       { "label": "Label",  "expr": "label" }
     ]
   },

@@ -13,7 +13,7 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
 - **Sortable columns.** Click a header to sort (numeric/hex columns sort numerically, text alphabetically); click again to toggle direction. The choice persists across stops.
 - **Filter & changed-only.** A per-tab filter box narrows rows as you type (focus is preserved); a **Changed** toggle shows only rows that moved since the last stop.
 - **Copy out.** Copy the (filtered) table as **CSV** or **Markdown** in one click — grouped tables add a leading `Group` column.
-- **Number base & alignment.** Flip numeric/hex columns between raw → decimal → hex; numeric columns right-align with tabular figures, and hovering any cell shows its full value in a tooltip.
+- **Per-column number base & alignment.** Show any numeric column as **dec / hex / bin** — cycle it from the ▦ Columns menu, or set a default in config with a field's `"base"`. Numeric columns right-align with tabular figures, and hovering any cell shows its full value in a tooltip.
 - **Sticky header.** The header row stays put while you scroll a long table.
 - **Refresh on demand or on change.** A **Refresh** button re-reads the config without restarting the debugger, and the panel also refreshes automatically when the config file changes on disk (while stopped).
 - **Pause / Resume.** Stop auto-refreshing and querying GDB on each stop when you don't need it; Refresh still does a one-shot. Remembered per workspace.
@@ -63,7 +63,7 @@ The config file (default `rtos-inspector.json`) is a JSON object that is a **map
 | `label`   | master sections             | Expression evaluated on the master element to title each tree node when another section groups by this one. |
 | `groupBy` | grouping sections           | Names a master section; renders this section as a collapsible tree, one group per master element (use `${master}` in `root`/`head`/`count`/`nil`). |
 | `max`     | all                         | Traversal upper bound / safety guard (default `1024`). |
-| `fields`  | all *(required)*            | Ordered list of `{ "label", "expr" }` columns (first column = row identity). A field may add `"hidden": true` to start collapsed/unfetched. |
+| `fields`  | all *(required)*            | Ordered list of `{ "label", "expr" }` columns (first column = row identity). A field may add `"hidden": true` (start collapsed/unfetched) and/or `"base": "dec"\|"hex"\|"bin"` (default number base). |
 
 #### Notes on the subtle fields
 

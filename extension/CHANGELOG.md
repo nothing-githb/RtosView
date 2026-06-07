@@ -2,6 +2,15 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.22.0] - 2026-06-06
+
+### Changed
+- **Number base is now per-column** (was a single per-tab toggle). Cycle any
+  numeric column through **dec → hex → bin → raw** from the ▦ Columns menu (the
+  header shows a small base tag), and set a default in config with a field's
+  **`"base": "dec"|"hex"|"bin"`**. **Binary** is new. The demo's `widgets` shows
+  `X` in hex and `Y` in binary.
+
 ## [0.21.0] - 2026-06-06
 
 ### Removed

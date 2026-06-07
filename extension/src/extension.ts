@@ -5,7 +5,7 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 // Tipler
 // ---------------------------------------------------------------------------
-interface FieldCfg { label: string; expr: string; hidden?: boolean; }   // hidden: başlangıçta gizli (kayıtlı tercih yoksa)
+interface FieldCfg { label: string; expr: string; hidden?: boolean; base?: string; }   // hidden: başlangıçta gizli; base: sayısal görüntü tabanı "dec"|"hex"|"bin" (yoksa ham)
 interface SectionCfg {
   mode: 'linked_list' | 'array' | 'index_list';
   root: string;
@@ -27,6 +27,7 @@ type Row = Record<string, string>;
 interface Group { label: string; key: string; rows: Row[]; }
 interface Section {
   name: string; columnsAll: string[]; hidden: string[]; rows: Row[]; summary: string;
+  bases?: Record<string, string>;   // kolon -> config sayı tabanı (dec/hex/bin)
   needsSelection?: boolean;   // gruplu bölüm: master bölüm boş/bulunamadı
   grouped?: boolean;          // groupBy ile ağaç olarak gruplanmış
   groups?: Group[];           // her master elemanı için bir grup
@@ -402,6 +403,13 @@ function effectiveColumns(section: string, fields: FieldCfg[]): { order: string[
   return { order, hidden, active };
 }
 
+// Kolon -> config sayı tabanı (dec/hex/bin); field.base verilmişse
+function fieldBases(fields: FieldCfg[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const f of fields) if (f.base) m[f.label] = f.base;
+  return m;
+}
+
 // Yalnız AKTİF sütunları gdb'den çek (pasif sütunlar için print çalıştırılmaz)
 async function buildSection(
   session: vscode.DebugSession,
@@ -416,7 +424,7 @@ async function buildSection(
     .filter((f): f is FieldCfg => !!f);
   const rows = await collectSection(session, { ...cfg, fields: effFields }, frameId, cursor, name);
   log?.debug(`section "${name}" (${cfg.mode}, root=${cfg.root}): ${rows.length} row(s); active=[${eff.active.join(', ')}]`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows) };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +504,7 @@ async function buildGrouped(
   }
   const total = groups.reduce((a, g) => a + g.rows.length, 0);
   log?.debug(`grouped "${name}" by ${scfg.groupBy}: ${groups.length} group(s), ${total} row(s)`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -723,6 +731,13 @@ function getHtml(): string {
 
   /* sayısal kolonlar sağa hizalı + tabular figürler (tam değer her hücrede title'da) */
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .basetag { font-size: 9px; opacity: 0.6; margin-left: 4px; font-weight: 600; vertical-align: super; }
+  .col-base {
+    margin-left: auto; font-size: 10px; padding: 1px 7px; border-radius: 4px; cursor: pointer; min-width: 30px;
+    border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); background: transparent;
+    color: var(--vscode-foreground); font-family: var(--vscode-editor-font-family, monospace);
+  }
+  .col-base:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)); }
 
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
@@ -931,8 +946,11 @@ function getHtml(): string {
     if (!base || base === 'raw') return v;
     const n = toIntVal(v); if (n === null) return v;
     if (base === 'hex') return (n < 0 ? '-0x' + (-n).toString(16) : '0x' + n.toString(16));
+    if (base === 'bin') return (n < 0 ? '-0b' + (-n).toString(2) : '0b' + n.toString(2));
     return String(n); // dec
   }
+  function nextBase(b) { return b === 'dec' ? 'hex' : b === 'hex' ? 'bin' : b === 'bin' ? 'raw' : 'dec'; }
+  function baseLbl(b) { return b === 'hex' ? '0x' : b === 'bin' ? '0b' : b === 'dec' ? '10' : '—'; }
   function numericCols(columns, rows) {
     const set = {};
     for (const c of columns) {
@@ -942,16 +960,12 @@ function getHtml(): string {
     }
     return set;
   }
-  // --- araç çubuğu (filtre / changed-only / sayı tabanı / kopya) ---
-  function toolbarHtml(st, hasNum) {
+  // --- araç çubuğu (filtre / changed-only / kopya); sayı tabanı artık per-kolon (▦ Columns) ---
+  function toolbarHtml(st) {
     let h = '<div class="tbl-bar">';
     h += '<input class="tbl-filter" type="text" placeholder="Filter rows…" value="' + esc(st.filter || '') + '">';
     if (st.sec.grouped) h += '<button class="btn grp-toggle">' + (st.flat ? '⊞ Tree' : '☰ Flat') + '</button>';
     else if (st.changeCount > 0) h += '<button class="btn chg-only' + (st.changedOnly ? ' on' : '') + '" title="Show only changed rows">Δ Changed</button>';
-    if (hasNum) {
-      const lbl = st.numBase === 'hex' ? '0x' : (st.numBase === 'dec' ? '10' : '#');
-      h += '<button class="btn num-base" title="Number base: raw → dec → hex">' + lbl + '</button>';
-    }
     h += '<span class="grow"></span>';
     h += '<button class="btn copy-csv" title="Copy table as CSV">⧉ CSV</button>';
     h += '<button class="btn copy-md" title="Copy table as Markdown">⧉ MD</button>';
@@ -1003,16 +1017,18 @@ function getHtml(): string {
     vscodeApi.postMessage({ type: 'copy', text: text });
   }
 
-  function headerCells(columns, sortCol, sortDir, numCols) {
-    numCols = numCols || {};
+  function headerCells(columns, sortCol, sortDir, numCols, colBase) {
+    numCols = numCols || {}; colBase = colBase || {};
     let h = '';
     for (const c of columns) {
       const active = c === sortCol;
       const ind = active ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
       const cls = ((active ? 'sorted' : '') + (numCols[c] ? ' num' : '')).trim();
+      const b = colBase[c] || 'raw';
+      const tag = (b !== 'raw') ? '<span class="basetag">' + baseLbl(b) + '</span>' : '';
       h += '<th class="' + cls + '" data-col="' + esc(c) + '" draggable="true" ' +
         'title="Click: sort  ·  Drag: reorder  ·  Right-click: columns">' +
-        esc(c) + '<span class="sort-ind">' + ind + '</span></th>';
+        esc(c) + tag + '<span class="sort-ind">' + ind + '</span></th>';
     }
     return h;
   }
@@ -1028,14 +1044,15 @@ function getHtml(): string {
   function dataRow(columns, row, changed, opts) {
     opts = opts || {};
     const numCols = opts.numCols || {};
-    const base = opts.base || 'raw';
+    const colBase = opts.colBase || {};
     const rk = rowKeyOf(row, columns);
     let h = '<tr>';
     for (const c of columns) {
       const ck = rk + '\\u0000' + c;
       const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
       const raw = row[c] ?? '';
-      const disp = (numCols[c] && !isDash(raw)) ? fmtNum(raw, base) : raw;
+      const b = colBase[c] || 'raw';
+      const disp = (b !== 'raw' && !isDash(raw) && toIntVal(raw) !== null) ? fmtNum(raw, b) : raw;
       const classes = [];
       if (isMono(c)) classes.push('mono');
       if (numCols[c]) classes.push('num');
@@ -1053,14 +1070,14 @@ function getHtml(): string {
   function buildTable(columns, rows, sortCol, sortDir, changed, opts) {
     if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
     const data = sortRows(rows, columns, sortCol, sortDir);
-    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols) + '</tr></thead><tbody>';
+    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase) + '</tr></thead><tbody>';
     for (const row of data) h += dataRow(columns, row, changed, opts);
     return h + '</tbody></table>';
   }
   // groupBy: master düğümleri + altında satırlar (aç/kapa)
   function buildGroupedTable(columns, groups, collapsed, sortCol, sortDir, opts) {
     if (!groups || !groups.length) return '<div class="empty">No groups (master section is empty).</div>';
-    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols) + '</tr></thead><tbody>';
+    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase) + '</tr></thead><tbody>';
     for (const g of groups) {
       const isCol = collapsed.indexOf(g.key) !== -1;
       h += '<tr class="grphdr" data-grp="' + esc(g.key) + '"><td colspan="' + columns.length + '">' +
@@ -1091,9 +1108,10 @@ function getHtml(): string {
     const grouped = st.sec.grouped;
     const allRows = grouped ? st.sec.groups.reduce((a, g) => a.concat(g.rows), []) : st.sec.rows;
     const numCols = numericCols(cols, allRows);
-    const opts = { numCols: numCols, base: st.numBase || 'raw' };
+    st.numCols = numCols;   // ▦ Columns menüsü per-kolon base düğmesi için kullanır
+    const opts = { numCols: numCols, colBase: st.colBase || {} };
     const summary = '<div class="summary">' + esc(st.sec.summary) + '</div>';
-    const bar = toolbarHtml(st, Object.keys(numCols).length > 0);
+    const bar = toolbarHtml(st);
     let table;
     if (grouped && !st.flat) {
       table = buildGroupedTable(cols, st.sec.groups, st.collapsed || [], st.sortCol, st.sortDir, opts);
@@ -1111,12 +1129,18 @@ function getHtml(): string {
     const st = secState[name];
     if (!menu) return;
     if (!st) { menu.innerHTML = ''; return; }
-    let h = '<div class="cols-title">Columns — drag to reorder</div>';
+    const numCols = st.numCols || {};
+    const colBase = st.colBase || {};
+    let h = '<div class="cols-title">Columns — drag to reorder · base for numbers</div>';
     st.order.forEach(label => {
       const checked = st.hidden.indexOf(label) === -1 ? ' checked' : '';
+      const baseBtn = numCols[label]
+        ? '<button class="col-base" data-label="' + esc(label) + '" title="Number base: dec → hex → bin → raw">' + baseLbl(colBase[label] || 'raw') + '</button>'
+        : '';
       h += '<div class="cols-item" data-label="' + esc(label) + '" draggable="true">' +
         '<span class="cols-grip" title="Drag to reorder">⠿</span>' +
         '<label><input type="checkbox" data-act="vis"' + checked + '> ' + esc(label) + '</label>' +
+        baseBtn +
         '</div>';
     });
     menu.innerHTML = h;
@@ -1148,8 +1172,10 @@ function getHtml(): string {
     const collapsed = (prev && prev.collapsed) ? prev.collapsed : [];
     const filter = (prev && prev.filter) ? prev.filter : '';
     const changedOnly = !!(prev && prev.changedOnly);
-    const numBase = (prev && prev.numBase) ? prev.numBase : 'raw';
-    secState[name] = { sec, sortCol, sortDir, changed, changeCount: count, order, hidden, flat, collapsed, filter, changedOnly, numBase };
+    // per-kolon sayı tabanı: kullanıcının önceki seçimi korunur, config (sec.bases) ilk kez doldurur
+    const colBase = (prev && prev.colBase) ? prev.colBase : {};
+    if (sec.bases) for (const k in sec.bases) if (!(k in colBase)) colBase[k] = sec.bases[k];
+    secState[name] = { sec, sortCol, sortDir, changed, changeCount: count, order, hidden, flat, collapsed, filter, changedOnly, colBase };
     const cnt = cntElOf(name);
     if (cnt) cnt.textContent = sec.grouped ? (sec.groups || []).reduce((a, g) => a + g.rows.length, 0) : sec.rows.length;
     const tab = tabElOf(name);
@@ -1208,6 +1234,14 @@ function getHtml(): string {
       }
       return;
     }
+    // per-kolon sayı tabanı (▦ menüsü içindeki düğme) — cols-menu stopProp'tan ÖNCE
+    const baseBtn = e.target.closest('.col-base');
+    if (baseBtn) {
+      const name = paneName(e); const st = secState[name];
+      if (st) { st.colBase = st.colBase || {}; const l = baseBtn.dataset.label; st.colBase[l] = nextBase(st.colBase[l] || 'raw'); paint(name); buildColsMenu(name); }
+      e.stopPropagation();
+      return;
+    }
     if (e.target.closest('.cols-menu')) { e.stopPropagation(); return; }
     // grup: düz/ağaç görünüm geçişi
     if (e.target.closest('.grp-toggle')) {
@@ -1218,8 +1252,6 @@ function getHtml(): string {
     // araç çubuğu: changed-only / sayı tabanı / kopya
     const chgBtn = e.target.closest('.chg-only');
     if (chgBtn) { const name = paneName(e); const st = secState[name]; if (st) { st.changedOnly = !st.changedOnly; chgBtn.classList.toggle('on', st.changedOnly); applyFilter(name); } return; }
-    const numBtn = e.target.closest('.num-base');
-    if (numBtn) { const name = paneName(e); const st = secState[name]; if (st) { st.numBase = st.numBase === 'hex' ? 'raw' : (st.numBase === 'dec' ? 'hex' : 'dec'); paint(name); } return; }
     const csvBtn = e.target.closest('.copy-csv');
     if (csvBtn) { copyTable(paneName(e), 'csv'); flashBtn(csvBtn); return; }
     const mdBtn = e.target.closest('.copy-md');

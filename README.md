@@ -50,8 +50,9 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
   last stop.
 - **Copy out** — copy the (filtered) table as **CSV** or **Markdown** with one
   click (grouped tables add a `Group` column).
-- **Number base** — flip numeric/hex columns between raw → decimal → hex;
-  numeric columns are right-aligned with tabular figures.
+- **Per-column number base** — show any numeric column as **dec / hex / bin**
+  (cycle it from the ▦ Columns menu) and set a default in config with a field's
+  `"base"`. Numeric columns are right-aligned with tabular figures.
 - **Sticky header & full-value tooltips** — the header stays put on vertical
   scroll, and hovering any cell shows its full value in a tooltip.
 - **Change highlighting** — changed cells are amber, with the previous value shown
@@ -132,7 +133,7 @@ Every field, across all modes:
 |-----------|-------|---------|---------|
 | `mode`    | all | — (required) | `"linked_list"`, `"array"`, or `"index_list"`. Selects the traversal. |
 | `root`    | all | — (required) | Starting expression in your program's own syntax (head pointer, array, or buffer). May contain `${master}` (grouping). |
-| `fields`  | all | — (required) | Ordered list of `{ "label", "expr" }` columns. `label` is the header (and first column = row identity); `expr` is the accessor appended after the element. A field may add `"hidden": true` to start collapsed. |
+| `fields`  | all | — (required) | Ordered list of `{ "label", "expr" }` columns. `label` is the header (and first column = row identity); `expr` is the accessor appended after the element. A field may add `"hidden": true` (start collapsed) and/or `"base": "dec"\|"hex"\|"bin"` (default number base). |
 | `next`    | linked_list, index_list | — (set it) | linked_list: the pointer field to the next node (used as `cursor->next`). index_list: the field holding the next **index**, OR a `${expr}` template that computes it (like `wrap` — `${expr}` is the element; e.g. `"${expr}.link.idx"` or `"g_succ[${expr}.id]"`). The traversal uses this verbatim, so set it; it is only assumed to be `next` when building a grouped master's selector expression. |
 | `head`    | index_list | — | Starting **index** expression, read once. May contain `${master}` (grouping). |
 | `nil`     | index_list | `-1` | Sentinel index that ends the walk. May contain `${master}` (grouping). |
