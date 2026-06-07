@@ -2,6 +2,23 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.20.2] - 2026-06-06
+
+### Fixed
+- **Panel rendered nothing (blank, no data).** The table-toolbar code added in
+  0.20.0 contained regex/string literals whose backslash escapes were stripped by
+  the webview's HTML *template literal*: `/[",\n]/` and the `'\n'` joins in the
+  CSV/Markdown copy became an invalid regex / unterminated string, so the entire
+  webview script failed to compile and nothing rendered. Escaped them
+  (`\\n`, `\\d`, `\\s`, `\\(` …) and also repaired the silently-degraded
+  `isNumStr` / `isNullPtr` / whitespace regexes. Verified by compiling and
+  executing the webview against mock data.
+
+### Changed
+- Example config no longer uses `${selected}` master-detail; all relationships
+  use grouping (`groupBy` + `${master}`), so every section populates on each stop
+  without clicking a row.
+
 ## [0.20.1] - 2026-06-06
 
 ### Fixed

@@ -1,5 +1,5 @@
 {
-  "//": "İki ilişki türü: (1) master-detail — process satırına tıkla, 'threads'/'mutexes' o process'e göre dolar (${selected}, ayrı sekme). (2) gruplama — 'semaphores' kendi sekmesinde ama 'processes' altında ağaç olarak gruplanır (groupBy + ${master}). 'timers/widgets/slots' bağımsız.",
+  "//": "İlişki = gruplama (groupBy + ${master}): 'semaphores' ve 'procSlots' 'processes' altında ağaç olarak, tıklamadan, tek seferde gelir. 'processes' bağımsız bir liste (label=name düğüm başlığını verir). 'timers/widgets/slots/boxes/pool' bağımsız.",
 
   "processes": {
     "mode": "linked_list",
@@ -12,17 +12,6 @@
     ]
   },
 
-  "threads": {
-    "mode": "linked_list",
-    "root": "${selected}->thread_list",
-    "next": "next",
-    "fields": [
-      { "label": "ID",       "expr": "id" },
-      { "label": "Name",     "expr": "name" },
-      { "label": "State",    "expr": "state" },
-      { "label": "Priority", "expr": "prio" }
-    ]
-  },
 
   "semaphores": {
     "groupBy": "processes",
@@ -35,18 +24,6 @@
       { "label": "Max",        "expr": "max_count" },
       { "label": "Waiting",    "expr": "waiting" },
       { "label": "Discipline", "expr": "discipline" }
-    ]
-  },
-
-  "mutexes": {
-    "mode": "linked_list",
-    "root": "${selected}->mutex_list",
-    "next": "next",
-    "fields": [
-      { "label": "ID",      "expr": "id" },
-      { "label": "Name",    "expr": "name" },
-      { "label": "Owner",   "expr": "owner" },
-      { "label": "Locked",  "expr": "locked" }
     ]
   },
 

@@ -917,7 +917,7 @@ function getHtml(): string {
   }
   function isNullPtr(v) {
     const t = (v == null ? '' : String(v)).trim();
-    return /^(\([^)]*\)\s*)?0x0+$/.test(t);   // 0x0, 0x00, "(tcb_t *) 0x0"
+    return /^(\\([^)]*\\)\\s*)?0x0+$/.test(t);   // 0x0, 0x00, "(tcb_t *) 0x0"
   }
   function isDash(v) { return isUnreadable(v) || isNullPtr(v); }
 
@@ -980,8 +980,8 @@ function getHtml(): string {
   }
 
   // --- sayısal kolon algısı + hex/dec biçimleme ---
-  function isNumStr(v) { const t = String(v).trim(); return /^-?\d+$/.test(t) || /^0x[0-9a-fA-F]+$/.test(t); }
-  function toIntVal(v) { const t = String(v).trim(); if (/^0x[0-9a-fA-F]+$/.test(t)) return parseInt(t, 16); if (/^-?\d+$/.test(t)) return parseInt(t, 10); return null; }
+  function isNumStr(v) { const t = String(v).trim(); return /^-?\\d+$/.test(t) || /^0x[0-9a-fA-F]+$/.test(t); }
+  function toIntVal(v) { const t = String(v).trim(); if (/^0x[0-9a-fA-F]+$/.test(t)) return parseInt(t, 16); if (/^-?\\d+$/.test(t)) return parseInt(t, 10); return null; }
   function fmtNum(v, base) {
     if (!base || base === 'raw') return v;
     const n = toIntVal(v); if (n === null) return v;
@@ -1042,18 +1042,18 @@ function getHtml(): string {
     const out = []; let grp = '';
     for (const tr of tbl.querySelectorAll('tbody tr')) {
       if (tr.style.display === 'none') continue;
-      if (tr.classList.contains('grphdr')) { grp = tr.textContent.replace(/[▾▸]/g, '').replace(/\s+\d+\s*$/, '').trim(); continue; }
-      const cells = [].map.call(tr.children, td => { const c = td.cloneNode(true); for (const o of c.querySelectorAll('.old')) o.remove(); return c.textContent.replace(/\s+/g, ' ').trim(); });
+      if (tr.classList.contains('grphdr')) { grp = tr.textContent.replace(/[▾▸]/g, '').replace(/\\s+\\d+\\s*$/, '').trim(); continue; }
+      const cells = [].map.call(tr.children, td => { const c = td.cloneNode(true); for (const o of c.querySelectorAll('.old')) o.remove(); return c.textContent.replace(/\\s+/g, ' ').trim(); });
       out.push(grouped ? [grp].concat(cells) : cells);
     }
     const cols = grouped ? ['Group'].concat(heads) : heads;
     let text;
     if (fmt === 'csv') {
-      const q = s => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-      text = [cols].concat(out).map(r => r.map(q).join(',')).join('\n');
+      const q = s => /[",\\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      text = [cols].concat(out).map(r => r.map(q).join(',')).join('\\n');
     } else {
-      text = '| ' + cols.join(' | ') + ' |\n| ' + cols.map(() => '---').join(' | ') + ' |\n' +
-        out.map(r => '| ' + r.join(' | ') + ' |').join('\n');
+      text = '| ' + cols.join(' | ') + ' |\\n| ' + cols.map(() => '---').join(' | ') + ' |\\n' +
+        out.map(r => '| ' + r.join(' | ') + ' |').join('\\n');
     }
     vscodeApi.postMessage({ type: 'copy', text: text });
   }
