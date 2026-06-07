@@ -33,6 +33,9 @@ by hand in the debugger.
 - **Master–detail.** Give a section's `root` a `${selected}` placeholder and it
   becomes a detail table; click a row in a master section (e.g. a process) to
   populate it with *that* element's lists (its threads / semaphores / mutexes).
+- **Grouping (tree).** Or keep a section in its **own tab** but show it as a
+  collapsible tree grouped under a master (`groupBy` + `${master}`) — e.g. all
+  semaphores grouped under each process — with a flat-view toggle.
 - **Two traversal modes:** `linked_list` (head pointer + `next` field) and
   `array` (`count` elements, with `.` / `->` element access).
 - **Arbitrary root expressions** — anything valid in GDB, e.g.
@@ -92,6 +95,8 @@ section's JSON key is its tab label (`threads`, `semaphores`, `mutexes`,
 | `access` | *(array)* element field access: `"."` (default) or `"->"` |
 | `cast`   | *(array)* cast for a generic `void*` buffer — write it in full (e.g. `widget_t *`) → `((cast)(root))[i]` |
 | `wrap`   | wrap the **element** (before field access); `${expr}` = the element → `wrap(elem)<access>field` |
+| `label`  | *(master)* expression that titles each tree node when another section groups by this one |
+| `groupBy`| render this section as a tree grouped under the named master section; use `${master}` in `root` |
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
 
@@ -174,6 +179,32 @@ details. For a process list whose processes each own their own sub-lists:
 Click a process row and the `threads` and `mutexes` tables show *that* process's
 lists. The first master row is selected automatically. Array detail sections may
 also use `${selected}` in `count` (e.g. `"count": "${selected}->n"`).
+
+### Grouping (tree, in the same tab)
+
+To keep a section in its **own tab** but show it grouped under a parent (instead
+of separate detail tabs), set `groupBy` to the master section's name and use
+`${master}` in `root`. The master's `label` titles each node:
+
+```json
+{
+  "processes": {
+    "mode": "linked_list", "root": "g_process_list", "next": "next",
+    "label": "name",
+    "fields": [ { "label": "PID", "expr": "pid" }, { "label": "Name", "expr": "name" } ]
+  },
+  "semaphores": {
+    "groupBy": "processes",
+    "mode": "linked_list", "root": "${master}->sem_list", "next": "next",
+    "fields": [ { "label": "ID", "expr": "id" }, { "label": "Count", "expr": "count" } ]
+  }
+}
+```
+
+The Semaphores tab then lists every process as a collapsible node with its own
+semaphores beneath; a **Flat view** button switches to an ungrouped list.
+(Grouping shows *all* parents at once in one tab; master–detail shows one
+selected parent's children across separate tabs — use whichever fits.)
 
 ### Generic `void*` arrays
 

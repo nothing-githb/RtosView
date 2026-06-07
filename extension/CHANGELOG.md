@@ -2,6 +2,16 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.15.0] - 2026-06-06
+
+### Added
+- **Grouping (tree view).** A section can set `"groupBy": "<masterSection>"` and
+  use `${master}` in its `root` to render — in its **own tab** — as a tree
+  grouped under each master element (e.g. semaphores grouped under each process).
+  The master's `label` expression titles each node; nodes are collapsible and a
+  **Flat view** toggle switches to an ungrouped list. Distinct from master–detail
+  (`${selected}`), which drives separate detail tabs from the selected row.
+
 ## [0.14.1] - 2026-06-06
 
 ### Changed

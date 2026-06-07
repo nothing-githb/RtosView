@@ -14,17 +14,22 @@ interface SectionCfg {
   access?: string;    // array eleman erişimi: "." (default) veya "->"
   cast?: string;      // array: void*/generic buffer'a cast (tam yaz, örn "widget_t *") -> ((cast)(root))[i]
   wrap?: string;      // elemanı field'a erişmeden ÖNCE sarmala; ${expr}=eleman. Örn "((T*)${expr})" -> ((T*)(elem))->field
+  label?: string;     // (master) ağaç düğüm başlığı için ifade; groupBy hedefi bunu kullanır
+  groupBy?: string;   // bu bölümü adı verilen master bölüme göre ağaç olarak grupla; root'ta ${master}
   max?: number;
   fields: FieldCfg[];
 }
 type SyncCfg = Record<string, unknown>;
 
 type Row = Record<string, string>;
+interface Group { label: string; key: string; rows: Row[]; }
 interface Section {
   name: string; columnsAll: string[]; hidden: string[]; rows: Row[]; summary: string;
   selectable?: boolean;       // master bölüm: satırları tıklanabilir
   selectedKey?: string;       // seçili master satırının anahtarı (ilk kolon değeri)
   needsSelection?: boolean;   // detay bölüm: henüz seçim yok
+  grouped?: boolean;          // groupBy ile ağaç olarak gruplanmış
+  groups?: Group[];           // her master elemanı için bir grup
 }
 interface ColPref { order: string[]; hidden: string[]; }
 
@@ -336,12 +341,65 @@ function selectorExpr(cfg: SectionCfg, index: number): string {
 function substituteSel(expr: string, sel: string): string {
   return expr.split('${selected}').join('(' + sel + ')');
 }
+// Gruplama (ağaç): ${master} yer tutucusu
+function isGrouped(cfg: SectionCfg): boolean {
+  return typeof cfg.groupBy === 'string' && cfg.groupBy.length > 0;
+}
+function substituteMaster(expr: string, sel: string): string {
+  return expr.split('${master}').join('(' + sel + ')');
+}
+// '0x.. "init"' -> 'init'; aksi halde olduğu gibi (ağaç düğüm başlığı)
+function nodeLabel(v: string): string {
+  const m = v.match(/"([^"]*)"/);
+  return m ? m[1] : v;
+}
 function firstActiveLabel(sec: Section): string | undefined {
   return sec.columnsAll.find(l => sec.hidden.indexOf(l) === -1);
 }
 function rowKeyAt(sec: Section, idx: number): string | undefined {
   const fa = firstActiveLabel(sec);
   return fa ? sec.rows[idx]?.[fa] : undefined;
+}
+
+// groupBy: her master elemanı için bir grup; root'taki ${master} o elemana çözülür
+async function buildGrouped(
+  session: vscode.DebugSession,
+  frameId: number | undefined,
+  i: number,
+  name: string,
+  scfg: SectionCfg,
+  masters: Record<string, { sec: Section; selExprs: string[]; cfg: SectionCfg }>
+): Promise<Section> {
+  const allLabels = scfg.fields.map(f => f.label);
+  const eff = effectiveColumns(name, allLabels);
+  const effFields = eff.active
+    .map(l => scfg.fields.find(f => f.label === l))
+    .filter((f): f is FieldCfg => !!f);
+  const m = masters[scfg.groupBy as string];
+  if (!m || !m.sec.rows.length) {
+    log?.warn(`grouped "${name}": master "${scfg.groupBy}" not found or empty`);
+    return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: '', grouped: true, groups: [], needsSelection: true };
+  }
+  const masterAcc = m.cfg.mode === 'array' ? (m.cfg.access ?? '.') : '->';
+  const groups: Group[] = [];
+  for (let mi = 0; mi < m.sec.rows.length; mi++) {
+    const selExpr = m.selExprs[mi];
+    const subCfg: SectionCfg = {
+      ...scfg,
+      fields: effFields,
+      root: substituteMaster(scfg.root, selExpr),
+      count: scfg.count ? substituteMaster(scfg.count, selExpr) : scfg.count
+    };
+    const rows = await collectSection(session, subCfg, frameId, '$rg_' + i + '_' + mi);
+    const key = rowKeyAt(m.sec, mi) ?? String(mi);
+    const label = m.cfg.label
+      ? nodeLabel(cleanValue(await gdbExec(session, `print (${selExpr})${masterAcc}${m.cfg.label}`, frameId)))
+      : key;
+    groups.push({ label, key, rows });
+  }
+  const total = groups.reduce((a, g) => a + g.rows.length, 0);
+  log?.debug(`grouped "${name}" by ${scfg.groupBy}: ${groups.length} group(s), ${total} row(s)`);
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups };
 }
 
 // ---------------------------------------------------------------------------
@@ -362,14 +420,14 @@ async function refresh(session: vscode.DebugSession, threadId: number) {
   const hasDetail = secs.some(s => isDetail(s.cfg));
   log?.info(`refresh: ${secs.length} section(s) [${secs.map(s => s.name).join(', ')}]${hasDetail ? ' (master-detail)' : ''}`);
 
-  // 1. geçiş: master/bağımsız bölümleri (detay olmayan) topla + satır seçim ifadeleri
-  const masters: Record<string, { sec: Section; selExprs: string[] }> = {};
+  // 1. geçiş: master/bağımsız bölümleri (detay/grup olmayan) topla + satır seçim ifadeleri
+  const masters: Record<string, { sec: Section; selExprs: string[]; cfg: SectionCfg }> = {};
   for (let i = 0; i < secs.length; i++) {
     const { name, cfg: scfg } = secs[i];
-    if (isDetail(scfg)) continue;
+    if (isDetail(scfg) || isGrouped(scfg)) continue;
     const sec = await buildSection(session, scfg, frameId, '$ri_' + i, name);
     if (hasDetail) sec.selectable = true;
-    masters[name] = { sec, selExprs: sec.rows.map((_, idx) => selectorExpr(scfg, idx)) };
+    masters[name] = { sec, selExprs: sec.rows.map((_, idx) => selectorExpr(scfg, idx)), cfg: scfg };
   }
 
   // Seçimi çöz -> ${selected} ifadesi
@@ -394,6 +452,7 @@ async function refresh(session: vscode.DebugSession, threadId: number) {
   const sections: Section[] = [];
   for (let i = 0; i < secs.length; i++) {
     const { name, cfg: scfg } = secs[i];
+    if (isGrouped(scfg)) { sections.push(await buildGrouped(session, frameId, i, name, scfg, masters)); continue; }
     if (!isDetail(scfg)) { sections.push(masters[name].sec); continue; }
     const allLabels = scfg.fields.map(f => f.label);
     const eff = effectiveColumns(name, allLabels);
@@ -577,6 +636,18 @@ function getHtml(): string {
   tbody tr.selrow td { cursor: pointer; }
   tbody tr.selected td { background: rgba(59,158,255,0.16) !important; }
   tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 #3b9eff; }
+  .grp-bar { margin: 10px 2px 6px; }
+  .grp-toggle { font-size: 11px; }
+  tr.grphdr td {
+    background: var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.13)) !important;
+    font-weight: 700; font-size: 12px; cursor: pointer;
+  }
+  tr.grphdr td:hover { background: var(--vscode-list-hoverBackground) !important; }
+  tr.grphdr .caret { display: inline-block; width: 12px; opacity: 0.8; }
+  .grpcnt {
+    font-size: 11px; opacity: 0.85; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+    background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); font-weight: 600;
+  }
 
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
@@ -766,16 +837,8 @@ function getHtml(): string {
     return { map, count };
   }
 
-  function buildTable(columns, rows, sortCol, sortDir, changed, selectable, selectedKey) {
-    if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
-    let data = rows;
-    if (sortCol && columns.indexOf(sortCol) !== -1) {
-      data = rows.slice().sort((r1, r2) => {
-        const c = compareVals(r1[sortCol] ?? '', r2[sortCol] ?? '');
-        return sortDir === 'desc' ? -c : c;
-      });
-    }
-    let h = '<table><thead><tr>';
+  function headerCells(columns, sortCol, sortDir) {
+    let h = '';
     for (const c of columns) {
       const active = c === sortCol;
       const ind = active ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
@@ -783,27 +846,56 @@ function getHtml(): string {
         'title="Click: sort  ·  Drag: reorder  ·  Right-click: columns">' +
         esc(c) + '<span class="sort-ind">' + ind + '</span></th>';
     }
-    h += '</tr></thead><tbody>';
-    for (const row of data) {
-      const rk = rowKeyOf(row, columns);
-      const trCls = [];
-      if (selectable) trCls.push('selrow');
-      if (selectable && selectedKey != null && rk === selectedKey) trCls.push('selected');
-      h += '<tr data-key="' + esc(rk) + '"' + (trCls.length ? ' class="' + trCls.join(' ') + '"' : '') + '>';
-      for (const c of columns) {
-        const ck = rk + '\\u0000' + c;
-        const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
-        const classes = [];
-        if (isMono(c)) classes.push('mono');
-        if (isChg) classes.push('changed');
-        const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
-        let inner = cell(c, row[c] ?? '');
-        if (isChg) {
-          inner += '<span class="old" title="previous value">' + esc(changed[ck]) + '</span>';
-        }
-        h += '<td' + clsAttr + '>' + inner + '</td>';
+    return h;
+  }
+  function sortRows(rows, columns, sortCol, sortDir) {
+    if (sortCol && columns.indexOf(sortCol) !== -1) {
+      return rows.slice().sort((r1, r2) => {
+        const c = compareVals(r1[sortCol] ?? '', r2[sortCol] ?? '');
+        return sortDir === 'desc' ? -c : c;
+      });
+    }
+    return rows;
+  }
+  function dataRow(columns, row, changed, selectable, selectedKey) {
+    const rk = rowKeyOf(row, columns);
+    const trCls = [];
+    if (selectable) trCls.push('selrow');
+    if (selectable && selectedKey != null && rk === selectedKey) trCls.push('selected');
+    let h = '<tr data-key="' + esc(rk) + '"' + (trCls.length ? ' class="' + trCls.join(' ') + '"' : '') + '>';
+    for (const c of columns) {
+      const ck = rk + '\\u0000' + c;
+      const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
+      const classes = [];
+      if (isMono(c)) classes.push('mono');
+      if (isChg) classes.push('changed');
+      const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
+      let inner = cell(c, row[c] ?? '');
+      if (isChg) inner += '<span class="old" title="previous value">' + esc(changed[ck]) + '</span>';
+      h += '<td' + clsAttr + '>' + inner + '</td>';
+    }
+    return h + '</tr>';
+  }
+  function buildTable(columns, rows, sortCol, sortDir, changed, selectable, selectedKey) {
+    if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
+    const data = sortRows(rows, columns, sortCol, sortDir);
+    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir) + '</tr></thead><tbody>';
+    for (const row of data) h += dataRow(columns, row, changed, selectable, selectedKey);
+    return h + '</tbody></table>';
+  }
+  // groupBy: master düğümleri + altında satırlar (aç/kapa)
+  function buildGroupedTable(columns, groups, collapsed, sortCol, sortDir) {
+    if (!groups || !groups.length) return '<div class="empty">No groups (master section is empty).</div>';
+    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir) + '</tr></thead><tbody>';
+    for (const g of groups) {
+      const isCol = collapsed.indexOf(g.key) !== -1;
+      h += '<tr class="grphdr" data-grp="' + esc(g.key) + '"><td colspan="' + columns.length + '">' +
+        '<span class="caret">' + (isCol ? '▸' : '▾') + '</span> ' + esc(g.label) +
+        ' <span class="grpcnt">' + g.rows.length + '</span></td></tr>';
+      if (!isCol) {
+        const data = sortRows(g.rows, columns, sortCol, sortDir);
+        for (const row of data) h += dataRow(columns, row, null, false, null);
       }
-      h += '</tr>';
     }
     return h + '</tbody></table>';
   }
@@ -818,12 +910,27 @@ function getHtml(): string {
     const body = bodyEl(name);
     if (!st || !st.sec || !body) return;
     if (st.sec.needsSelection) {
-      body.innerHTML = '<div class="empty">Select a row in a master section to populate this table.</div>';
+      const hint = st.sec.grouped
+        ? 'Master section for "' + esc(name) + '" is empty or missing.'
+        : 'Select a row in a master section to populate this table.';
+      body.innerHTML = '<div class="empty">' + hint + '</div>';
       return;
     }
     const cols = displayCols(st);
-    body.innerHTML =
-      '<div class="summary">' + esc(st.sec.summary) + '</div>' +
+    const summary = '<div class="summary">' + esc(st.sec.summary) + '</div>';
+    if (st.sec.grouped) {
+      const toggle = '<div class="grp-bar"><button class="btn grp-toggle">' +
+        (st.flat ? '⊞ Tree view' : '☰ Flat view') + '</button></div>';
+      if (st.flat) {
+        const all = [];
+        for (const g of st.sec.groups) for (const r of g.rows) all.push(r);
+        body.innerHTML = summary + toggle + buildTable(cols, all, st.sortCol, st.sortDir, null, false, null);
+      } else {
+        body.innerHTML = summary + toggle + buildGroupedTable(cols, st.sec.groups, st.collapsed || [], st.sortCol, st.sortDir);
+      }
+      return;
+    }
+    body.innerHTML = summary +
       buildTable(cols, st.sec.rows, st.sortCol, st.sortDir, st.changed, st.sec.selectable, st.sec.selectedKey);
   }
 
@@ -860,18 +967,24 @@ function getHtml(): string {
     const cols = order.filter(l => hidden.indexOf(l) === -1);
     const sortCol = prev && prev.sortCol && cols.indexOf(prev.sortCol) !== -1 ? prev.sortCol : null;
     const sortDir = prev && prev.sortDir ? prev.sortDir : 'asc';
-    const ch = computeChanges(prev && prev.sec ? prev.sec.rows : null, sec.rows, cols);
-    secState[name] = { sec, sortCol, sortDir, changed: ch.map, changeCount: ch.count, order, hidden };
+    let changed = {}, count = 0;
+    if (!sec.grouped) {
+      const ch = computeChanges(prev && prev.sec ? prev.sec.rows : null, sec.rows, cols);
+      changed = ch.map; count = ch.count;
+    }
+    const flat = !!(prev && prev.flat);
+    const collapsed = (prev && prev.collapsed) ? prev.collapsed : [];
+    secState[name] = { sec, sortCol, sortDir, changed, changeCount: count, order, hidden, flat, collapsed };
     const cnt = cntElOf(name);
-    if (cnt) cnt.textContent = sec.rows.length;
+    if (cnt) cnt.textContent = sec.grouped ? (sec.groups || []).reduce((a, g) => a + g.rows.length, 0) : sec.rows.length;
     const tab = tabElOf(name);
     if (tab) {
-      if (ch.count > 0 && name !== activeName) tab.classList.add('haschg');
+      if (count > 0 && name !== activeName) tab.classList.add('haschg');
       else if (name === activeName) tab.classList.remove('haschg');
     }
     paint(name);
     buildColsMenu(name);
-    return ch.count;
+    return count;
   }
 
   // Sekme tıklaması (delegasyon — container kalıcı, sekmeler dinamik)
@@ -921,6 +1034,24 @@ function getHtml(): string {
       return;
     }
     if (e.target.closest('.cols-menu')) { e.stopPropagation(); return; }
+    // grup: düz/ağaç görünüm geçişi
+    if (e.target.closest('.grp-toggle')) {
+      const name = paneName(e); const st = secState[name];
+      if (st) { st.flat = !st.flat; paint(name); }
+      return;
+    }
+    // grup başlığı: aç/kapa
+    const grphdr = e.target.closest('tr.grphdr');
+    if (grphdr) {
+      const name = paneName(e); const st = secState[name];
+      if (st) {
+        st.collapsed = st.collapsed || [];
+        const k = grphdr.dataset.grp; const ix = st.collapsed.indexOf(k);
+        if (ix === -1) st.collapsed.push(k); else st.collapsed.splice(ix, 1);
+        paint(name);
+      }
+      return;
+    }
     const th = e.target.closest('th[data-col]');
     if (th) {
       if (suppressClick) { suppressClick = false; return; }

@@ -43,6 +43,9 @@ by hand in the debugger.
 - **Master–detail.** A section whose `root` contains `${selected}` becomes a
   detail table; click a row in a master section (e.g. a process) to populate it
   with that element's lists. The first master row is auto-selected.
+- **Grouping (tree).** Or keep a section in its own tab and show it as a
+  collapsible tree grouped under a master (`groupBy` + `${master}`), with a
+  flat-view toggle.
 - **Read-only & safe.** Debug Inspector only *reads* globals — it never calls
   functions, so your program state is never disturbed.
 - **Leveled logging.** An *Debug Inspector* Output channel logs at
@@ -84,6 +87,8 @@ name). Each section uses the same fields:
 | `access` | *(array)* element field access: `"."` (default) or `"->"` (pointer array) |
 | `cast`   | *(array)* cast for a generic `void*` buffer — write it in full (e.g. `widget_t *`) → `((cast)(root))[i]` |
 | `wrap`   | wrap the **element** before field access; `${expr}` = the element → `wrap(elem)<access>field` |
+| `label`  | *(master)* expression titling each tree node when another section groups by this one |
+| `groupBy`| render as a tree grouped under the named master section; use `${master}` in `root` |
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
 

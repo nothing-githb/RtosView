@@ -1,10 +1,11 @@
 {
-  "//": "Master-detail örneği: 'processes' tablosunda bir satıra tıkla; thread/semaphore/mutex tabloları o process'e göre dolar (${selected}). 'timers' bağımsız (array).",
+  "//": "İki ilişki türü: (1) master-detail — process satırına tıkla, 'threads'/'mutexes' o process'e göre dolar (${selected}, ayrı sekme). (2) gruplama — 'semaphores' kendi sekmesinde ama 'processes' altında ağaç olarak gruplanır (groupBy + ${master}). 'timers/widgets/slots' bağımsız.",
 
   "processes": {
     "mode": "linked_list",
     "root": "g_process_list",
     "next": "next",
+    "label": "name",
     "fields": [
       { "label": "PID",  "expr": "pid" },
       { "label": "Name", "expr": "name" }
@@ -24,8 +25,9 @@
   },
 
   "semaphores": {
+    "groupBy": "processes",
     "mode": "linked_list",
-    "root": "${selected}->sem_list",
+    "root": "${master}->sem_list",
     "next": "next",
     "fields": [
       { "label": "ID",         "expr": "id" },
