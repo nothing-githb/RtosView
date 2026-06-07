@@ -82,7 +82,7 @@ name). Each section uses the same fields:
 | `next`   | *(linked_list)* the field pointing to the next node |
 | `count`  | *(array)* expression yielding the element count |
 | `access` | *(array)* element field access: `"."` (default) or `"->"` (pointer array) |
-| `cast`   | *(array)* element type for a generic `void*` buffer → `((cast *)(root))[i]` |
+| `cast`   | *(array)* cast for a generic `void*` buffer — write it in full (e.g. `widget_t *`) → `((cast)(root))[i]` |
 | `wrap`   | wrap the **element** before field access; `${expr}` = the element → `wrap(elem)<access>field` |
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
@@ -177,15 +177,15 @@ A `void*` dynamic-array example (give the element type with `cast`):
     "mode": "array",
     "root": "g_widgets.data",
     "count": "g_widgets.size",
-    "cast": "widget_t",
+    "cast": "widget_t *",
     "access": ".",
     "fields": [ { "label": "X", "expr": "x" }, { "label": "Label", "expr": "label" } ]
   }
 }
 ```
 
-Each element is read as `((widget_t *)(g_widgets.data))[i]`. For a buffer of
-pointers, set `cast` to the pointer type and `access` to `"->"`.
+Each element is read as `((widget_t *)(g_widgets.data))[i]`. Write the cast in
+full (the `*` is yours, not auto-added), so it composes for any type.
 
 ### Notes on `expr`
 

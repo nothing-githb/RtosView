@@ -67,7 +67,7 @@
     "mode": "array",
     "root": "g_widgets.data",
     "count": "g_widgets.size",
-    "cast": "widget_t",
+    "cast": "widget_t *",
     "access": ".",
     "fields": [
       { "label": "X",      "expr": "x" },

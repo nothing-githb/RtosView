@@ -12,7 +12,7 @@ interface SectionCfg {
   next?: string;      // linked_list
   count?: string;     // array
   access?: string;    // array eleman erişimi: "." (default) veya "->"
-  cast?: string;      // array: void*/generic buffer'ı eleman tipine cast et -> ((cast *)(root))[i]
+  cast?: string;      // array: void*/generic buffer'a cast (tam yaz, örn "widget_t *") -> ((cast)(root))[i]
   wrap?: string;      // elemanı field'a erişmeden ÖNCE sarmala; ${expr}=eleman. Örn "((T*)${expr})" -> ((T*)(elem))->field
   max?: number;
   fields: FieldCfg[];
@@ -208,8 +208,8 @@ async function collectSection(
 
   if (cfg.mode === 'array') {
     const access = cfg.access ?? '.';
-    // cast verilirse void*/generic buffer eleman tipine cast edilir: ((T *)(root))[i]
-    const base = cfg.cast ? `((${cfg.cast} *)(${cfg.root}))` : `(${cfg.root})`;
+    // cast verilirse void*/generic buffer cast edilir (cast'i tam yaz, örn "widget_t *"): ((cast)(root))[i]
+    const base = cfg.cast ? `((${cfg.cast})(${cfg.root}))` : `(${cfg.root})`;
     const countRaw = await gdbExec(session, `print ${cfg.count}`, frameId);
     const count = parseInt(cleanValue(countRaw), 10) || 0;
     for (let i = 0; i < Math.min(count, max); i++) {

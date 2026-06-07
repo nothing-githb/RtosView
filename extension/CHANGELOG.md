@@ -2,6 +2,13 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.13.2] - 2026-06-06
+
+### Changed
+- `cast` is no longer auto-suffixed with ` *`. Write the cast **in full**
+  (e.g. `"cast": "widget_t *"`) → `((cast)(root))[i]`. This avoids a double
+  pointer and composes for any type.
+
 ## [0.13.1] - 2026-06-06
 
 ### Changed

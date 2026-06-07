@@ -90,7 +90,7 @@ section's JSON key is its tab label (`threads`, `semaphores`, `mutexes`,
 | `next`   | *(linked_list)* the field pointing to the next node |
 | `count`  | *(array)* expression yielding the element count |
 | `access` | *(array)* element field access: `"."` (default) or `"->"` |
-| `cast`   | *(array)* element type for a generic `void*` buffer → `((cast *)(root))[i]` |
+| `cast`   | *(array)* cast for a generic `void*` buffer — write it in full (e.g. `widget_t *`) → `((cast)(root))[i]` |
 | `wrap`   | wrap the **element** (before field access); `${expr}` = the element → `wrap(elem)<access>field` |
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
@@ -186,7 +186,7 @@ give the element type with `cast` so the buffer can be indexed:
     "mode": "array",
     "root": "g_widgets.data",
     "count": "g_widgets.size",
-    "cast": "widget_t",
+    "cast": "widget_t *",
     "access": ".",
     "fields": [ { "label": "X", "expr": "x" }, { "label": "Label", "expr": "label" } ]
   }
