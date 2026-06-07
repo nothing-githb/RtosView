@@ -17,9 +17,11 @@ by hand in the debugger.
 
 - **Config-driven.** Point Debug Inspector at any global expression; it does not
   assume any layout. No code changes to your program.
-- **Two traversal modes.**
+- **Three traversal modes.**
   - `linked_list` — start at a head pointer, follow a `next` field until NULL.
   - `array` — iterate `count` elements of an array.
+  - `index_list` — a list stored in an array, linked by a *next-index* field
+    (start at `head`, follow `next` until `nil`); empty slots are skipped.
 - **Arbitrary root expressions.** `root` is passed to GDB verbatim, so anything
   valid works: `head`, `g_sys.thread_list`, `g_kernel.pools[0]->thread_list`.
 - **Live updates.** The panel refreshes every time execution stops and shows a
@@ -80,9 +82,11 @@ name). Each section uses the same fields:
 
 | Field    | Meaning |
 |----------|---------|
-| `mode`   | `"linked_list"` or `"array"` |
-| `root`   | Starting expression (any valid C expression) |
-| `next`   | *(linked_list)* the field pointing to the next node |
+| `mode`   | `"linked_list"`, `"array"`, or `"index_list"` |
+| `root`   | Starting expression — the head pointer / the array |
+| `next`   | *(linked_list)* next-node pointer field · *(index_list)* next-**index** field |
+| `head`   | *(index_list)* starting index expression |
+| `nil`    | *(index_list)* index that ends the walk (default `-1`) |
 | `count`  | *(array)* expression yielding the element count |
 | `access` | *(array)* element field access: `"."` (default) or `"->"` (pointer array) |
 | `cast`   | *(array)* cast for a generic `void*` buffer — write it in full (e.g. `widget_t *`) → `((cast)(root))[i]` |
@@ -191,6 +195,26 @@ A `void*` dynamic-array example (give the element type with `cast`):
 
 Each element is read as `((widget_t *)(g_widgets.data))[i]`. Write the cast in
 full (the `*` is yours, not auto-added), so it composes for any type.
+
+An `index_list` example — a list inside an array, linked by a next-**index**
+field (slots may be empty):
+
+```json
+{
+  "pool": {
+    "mode": "index_list",
+    "root": "g_slot_pool",
+    "head": "g_slot_head",
+    "next": "next",
+    "nil": "-1",
+    "access": ".",
+    "fields": [ { "label": "ID", "expr": "id" }, { "label": "Name", "expr": "name" } ]
+  }
+}
+```
+
+Starts at `head`, reads `root[idx]`, follows `next` until it equals `nil`;
+empty slots are skipped. `cast`/`wrap`/`access` work as in `array` mode.
 
 ### Notes on `expr`
 

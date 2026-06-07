@@ -2,6 +2,16 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.16.0] - 2026-06-06
+
+### Added
+- **`index_list` traversal mode.** Walk a list that lives inside an array and is
+  linked by an *index* field (not a pointer): start at `head` (an index
+  expression), read `root[idx]`, then follow `next` (the next index) until it
+  equals `nil` (default `-1`). Unused/empty slots are skipped. Supports
+  `access`/`cast`/`wrap` like array mode; a visited-set + `max` guard against
+  cycles. The demo gains a `pool` section (chain `0 → 2 → 5`, slots 1/3/4 empty).
+
 ## [0.15.1] - 2026-06-06
 
 ### Changed

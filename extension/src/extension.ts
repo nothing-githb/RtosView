@@ -7,11 +7,13 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 interface FieldCfg { label: string; expr: string; }
 interface SectionCfg {
-  mode: 'linked_list' | 'array';
+  mode: 'linked_list' | 'array' | 'index_list';
   root: string;
-  next?: string;      // linked_list
+  next?: string;      // linked_list: sonraki node pointer alanı | index_list: sonraki index alanı
+  head?: string;      // index_list: başlangıç index ifadesi
+  nil?: string;       // index_list: gezinmeyi bitiren index (varsayılan "-1")
   count?: string;     // array
-  access?: string;    // array eleman erişimi: "." (default) veya "->"
+  access?: string;    // array/index_list eleman erişimi: "." (default) veya "->"
   cast?: string;      // array: void*/generic buffer'a cast (tam yaz, örn "widget_t *") -> ((cast)(root))[i]
   wrap?: string;      // elemanı field'a erişmeden ÖNCE sarmala; ${expr}=eleman. Örn "((T*)${expr})" -> ((T*)(elem))->field
   label?: string;     // (master) ağaç düğüm başlığı için ifade; groupBy hedefi bunu kullanır
@@ -227,6 +229,35 @@ async function collectSection(
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
+    }
+  } else if (cfg.mode === 'index_list') {
+    // Dizi içinde index ile bağlı liste: head index'inden başla, next alanı sonraki index'i verir
+    const access = cfg.access ?? '.';
+    const base = cfg.cast ? `((${cfg.cast})(${cfg.root}))` : `(${cfg.root})`;
+    const toI = (s: string): number => {
+      const t = (s ?? '').trim();
+      if (!t) return NaN;
+      const n = Number(t);
+      if (Number.isFinite(n)) return n;
+      const m = t.match(/-?\d+/);
+      return m ? parseInt(m[0], 10) : NaN;
+    };
+    const nilNum = toI(cfg.nil ?? '-1');
+    let idx = toI(cleanValue(await gdbExec(session, `print ${cfg.head}`, frameId)));
+    const seen: Record<number, boolean> = {};
+    let guard = 0;
+    while (guard++ < max && Number.isFinite(idx) && idx !== nilNum && !seen[idx]) {
+      seen[idx] = true;
+      // eleman: base[idx]; field'a erişmeden ÖNCE wrap ile sarmalanır
+      let elem = `${base}[${idx}]`;
+      if (cfg.wrap) elem = cfg.wrap.split('${expr}').join('(' + elem + ')');
+      const row: Row = {};
+      for (const f of cfg.fields) {
+        const v = await gdbExec(session, `print ${elem}${access}${f.expr}`, frameId);
+        row[f.label] = cleanValue(v);
+      }
+      rows.push(row);
+      idx = toI(cleanValue(await gdbExec(session, `print ${elem}${access}${cfg.next}`, frameId)));
     }
   } else {
     await gdbExec(session, `set ${cursor} = ${cfg.root}`, frameId);

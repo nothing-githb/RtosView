@@ -55,6 +55,13 @@ typedef struct {
     int   size;   /* eleman sayisi */
 } dyn_array_t;
 
+/* ---------------- Index-linked list (dizi + index 'next'; bazi gozler bos) ---------------- */
+typedef struct {
+    int          id;
+    const char  *name;
+    int          next;   /* sonraki elemanin index'i; -1 = son */
+} slot_t;
+
 /* ---------------- Process (master: alt listeleri tutar) ---------------- */
 typedef struct process {
     int              pid;
@@ -106,6 +113,9 @@ process_t *g_process_list;   /* master listenin başı */
 widget_t    g_widget_pool[MAX_WIDGETS];   /* arka depo */
 dyn_array_t g_widgets;                    /* data = void*, widget_t[] gösterir */
 void       *g_slots[3];                   /* void* pointer dizisi -> her biri widget_t* (wrap örneği) */
+#define MAX_SLOTS 6
+slot_t      g_slot_pool[MAX_SLOTS];        /* bazi gozler bos; index ile bagli */
+int         g_slot_head;                   /* zincirin ilk index'i */
 
 kpool_t  g_pool0;
 kernel_t g_kernel;
@@ -192,6 +202,12 @@ int main(void)
     g_slots[0] = &g_widget_pool[0];
     g_slots[1] = &g_widget_pool[1];
     g_slots[2] = &g_widget_pool[2];
+
+    /* index-linked: zincir 0 -> 2 -> 5 -> -1 ; gozler 1,3,4 bos (atlanir) */
+    g_slot_pool[0].id = 101; g_slot_pool[0].name = "alpha"; g_slot_pool[0].next = 2;
+    g_slot_pool[2].id = 102; g_slot_pool[2].name = "beta";  g_slot_pool[2].next = 5;
+    g_slot_pool[5].id = 103; g_slot_pool[5].name = "gamma"; g_slot_pool[5].next = -1;
+    g_slot_head = 0;
 
     /* master liste: 2 process, her biri kendi alt listeleriyle */
     process_t *p0 = mk_proc(1, "init",   a, s0, m0);

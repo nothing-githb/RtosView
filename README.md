@@ -36,8 +36,9 @@ by hand in the debugger.
 - **Grouping (tree).** Or keep a section in its **own tab** but show it as a
   collapsible tree grouped under a master (`groupBy` + `${master}`) — e.g. all
   semaphores grouped under each process — with a flat-view toggle.
-- **Two traversal modes:** `linked_list` (head pointer + `next` field) and
-  `array` (`count` elements, with `.` / `->` element access).
+- **Three traversal modes:** `linked_list` (head pointer + `next` field),
+  `array` (`count` elements, with `.` / `->` element access), and `index_list`
+  (a list stored in an array, linked by a *next-index* field — empties skipped).
 - **Arbitrary root expressions** — anything valid in GDB, e.g.
   `g_kernel.pools[0]->thread_list`.
 - **Live updates** on every stop, with a "running…" badge while the program runs.
@@ -90,9 +91,11 @@ section's JSON key is its tab label (`threads`, `semaphores`, `mutexes`,
 
 | Field    | Meaning |
 |----------|---------|
-| `mode`   | `"linked_list"` or `"array"` |
-| `root`   | Starting expression (any valid C expression) |
-| `next`   | *(linked_list)* the field pointing to the next node |
+| `mode`   | `"linked_list"`, `"array"`, or `"index_list"` |
+| `root`   | Starting expression — the head pointer / the array |
+| `next`   | *(linked_list)* next-node pointer field · *(index_list)* next-**index** field |
+| `head`   | *(index_list)* starting index expression |
+| `nil`    | *(index_list)* index that ends the walk (default `-1`) |
 | `count`  | *(array)* expression yielding the element count |
 | `access` | *(array)* element field access: `"."` (default) or `"->"` |
 | `cast`   | *(array)* cast for a generic `void*` buffer — write it in full (e.g. `widget_t *`) → `((cast)(root))[i]` |
@@ -230,6 +233,30 @@ This reads each element as `((widget_t *)(g_widgets.data))[i]`. `count` is any
 expression for the element count (e.g. `used / sizeof(T)`); the row count shown
 in the summary is that size. For a buffer of *pointers*, set `cast` to the
 pointer type and `access` to `"->"`.
+
+### Index-linked lists (a list inside an array)
+
+When a list lives in a fixed array and elements link by an **index** rather than
+a pointer (an intrusive free-list / slot pool, with some slots empty), use
+`index_list`: start at `head`, read `root[idx]`, then follow the `next` index
+until it equals `nil` (default `-1`). Empty slots are skipped automatically.
+
+```json
+{
+  "pool": {
+    "mode": "index_list",
+    "root": "g_slot_pool",
+    "head": "g_slot_head",
+    "next": "next",
+    "nil": "-1",
+    "access": ".",
+    "fields": [ { "label": "ID", "expr": "id" }, { "label": "Name", "expr": "name" } ]
+  }
+}
+```
+
+`cast`/`wrap`/`access` work as in `array` mode; a visited-set and `max` guard
+against cycles. Write `nil` as GDB prints the index (usually decimal).
 
 ### Settings
 

@@ -90,5 +90,20 @@
       { "label": "Y",     "expr": "y" },
       { "label": "Label", "expr": "label" }
     ]
+  },
+
+  "//pool": "index_list: dizi içinde index ile bağlı liste. head index'inden başla, 'next' alanı sonraki index'i verir, 'nil' (-1) bitirir. Boş gözler (1,3,4) atlanır.",
+  "pool": {
+    "mode": "index_list",
+    "root": "g_slot_pool",
+    "head": "g_slot_head",
+    "next": "next",
+    "nil": "-1",
+    "access": ".",
+    "fields": [
+      { "label": "ID",   "expr": "id" },
+      { "label": "Name", "expr": "name" },
+      { "label": "Next", "expr": "next" }
+    ]
   }
 }
