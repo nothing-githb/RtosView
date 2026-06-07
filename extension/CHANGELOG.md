@@ -2,6 +2,13 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.12.1] - 2026-06-06
+
+### Changed
+- `rtosInspector.configPath` now accepts an **absolute path** (used as-is, and
+  works even with no workspace folder open); relative paths still resolve against
+  the workspace root. The file watcher follows the absolute path too.
+
 ## [0.12.0] - 2026-06-06
 
 ### Added

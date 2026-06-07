@@ -103,13 +103,17 @@ export function deactivate() {}
 // configPath ayarına göre config dosyasını izle; değişince paneli tazele
 function setupConfigWatcher(context: vscode.ExtensionContext) {
   configWatcher?.dispose();
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) return;
   const rel: string =
     vscode.workspace.getConfiguration('rtosInspector').get('configPath') ?? 'rtos-inspector.json';
-  configWatcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(folder, rel)
-  );
+  let pattern: vscode.RelativePattern;
+  if (path.isAbsolute(rel)) {
+    pattern = new vscode.RelativePattern(vscode.Uri.file(path.dirname(rel)), path.basename(rel));
+  } else {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return;
+    pattern = new vscode.RelativePattern(folder, rel);
+  }
+  configWatcher = vscode.workspace.createFileSystemWatcher(pattern);
   const onChange = () => {
     if (panel && lastStopped) refresh(lastStopped.session, lastStopped.threadId);
   };
@@ -161,12 +165,19 @@ function isNull(v: string): boolean {
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-function loadConfig(): SyncCfg | undefined {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) return undefined;
+// configPath mutlaksa doğrudan; göreliyse workspace köküne göre çözülür
+function configFilePath(): string | undefined {
   const rel: string =
     vscode.workspace.getConfiguration('rtosInspector').get('configPath') ?? 'rtos-inspector.json';
-  const file = path.join(folder.uri.fsPath, rel);
+  if (path.isAbsolute(rel)) return rel;
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) return undefined;
+  return path.join(folder.uri.fsPath, rel);
+}
+
+function loadConfig(): SyncCfg | undefined {
+  const file = configFilePath();
+  if (!file) return undefined;
   try {
     const text = fs.readFileSync(file, 'utf8');
     log?.debug(`config loaded: ${file}`);

@@ -196,7 +196,7 @@ pointer type and `access` to `"->"`.
 
 | Setting                | Default          | Description |
 |------------------------|------------------|-------------|
-| `rtosInspector.configPath` | `rtos-inspector.json` | Config file path, relative to the workspace root. |
+| `rtosInspector.configPath` | `rtos-inspector.json` | Config file path: **absolute**, or relative to the workspace root. |
 | `rtosInspector.debugTypes` | `["cppdbg"]`     | Debug adapter types the tracker attaches to. |
 
 ## How it works
