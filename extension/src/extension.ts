@@ -1530,11 +1530,16 @@ function getHtml(): string {
     return best;
   }
   // skeleton'ı yeni sırada yeniden kur, her bölümü secState ÖNBELLEĞİNDEN yeniden paint et (GDB YOK)
+  function setTabCount(name) {
+    const st = secState[name]; const cnt = cntElOf(name);
+    if (st && st.sec && cnt) cnt.textContent = st.sec.grouped ? (st.sec.groups || []).reduce((a, g) => a + g.rows.length, 0) : st.sec.rows.length;
+  }
   function applySectionLayout() {
     const vis = visibleFromOrder();
     currentNames = [];                 // ensureLayout erken-dönüşünü kır -> her zaman yeniden kur
     ensureLayout(vis);                 // tabs/panes iskeleti + currentNames + applyActive
-    for (const name of vis) if (secState[name] && secState[name].sec) { paint(name); buildColsMenu(name); }
+    // iskelet yeniden kurulduğu için sekme sayaçları 0'lanır; secState önbelleğinden geri yaz
+    for (const name of vis) if (secState[name] && secState[name].sec) { paint(name); buildColsMenu(name); setTabCount(name); }
   }
   function buildSectionsMenu() {
     let h = '<div class="cols-title">Sections — drag to reorder, toggle visibility</div>';

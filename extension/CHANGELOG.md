@@ -2,6 +2,13 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.25.2] - 2026-06-08
+
+### Fixed
+- Hiding or reordering a section **no longer zeroes the other tabs' count
+  badges**. The client-side relayout rebuilt the tab strip (counts start at 0) but
+  only repainted tables; it now restores each visible tab's count from cache.
+
 ## [0.25.1] - 2026-06-07
 
 ### Changed
