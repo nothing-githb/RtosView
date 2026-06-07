@@ -2,6 +2,13 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.22.3] - 2026-06-06
+
+### Changed
+- The header base button now cycles **raw → bin → dec → hex** and shows a clearer
+  label — `raw` / `bin` / `dec` / `hex` (uppercased in the header) instead of
+  `#` / `2` / `10` / `16`.
+
 ## [0.22.2] - 2026-06-06
 
 ### Changed

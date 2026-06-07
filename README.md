@@ -51,8 +51,8 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
 - **Copy out** — copy the (filtered) table as **CSV** or **Markdown** with one
   click (grouped tables add a `Group` column).
 - **Per-column number base** — show any numeric column as **dec / hex / bin** via
-  a click-to-cycle base button in the column header's top-right (`#`→`10`→`16`→`2`),
-  or set a default in config with a field's `"base"`. Numeric columns are
+  a click-to-cycle base button in the column header's top-right
+  (`raw`→`bin`→`dec`→`hex`), or set a default in config with a field's `"base"`. Numeric columns are
   right-aligned with tabular figures.
 - **Sticky header & full-value tooltips** — the header stays put on vertical
   scroll, and hovering any cell shows its full value in a tooltip.

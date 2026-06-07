@@ -950,8 +950,8 @@ function getHtml(): string {
     if (base === 'bin') return (n < 0 ? '-0b' + (-n).toString(2) : '0b' + n.toString(2));
     return String(n); // dec
   }
-  function nextBase(b) { return b === 'raw' ? 'dec' : b === 'dec' ? 'hex' : b === 'hex' ? 'bin' : 'raw'; }
-  function baseLbl(b) { return b === 'dec' ? '10' : b === 'hex' ? '16' : b === 'bin' ? '2' : '#'; }
+  function nextBase(b) { return b === 'raw' ? 'bin' : b === 'bin' ? 'dec' : b === 'dec' ? 'hex' : 'raw'; }   // raw → 2 → 10 → 16 → raw
+  function baseLbl(b) { return (b === 'dec' || b === 'hex' || b === 'bin') ? b : 'raw'; }
   function numericCols(columns, rows) {
     const set = {};
     for (const c of columns) {
@@ -1027,7 +1027,7 @@ function getHtml(): string {
       const cls = ((active ? 'sorted' : '') + (numCols[c] ? ' num' : '')).trim();
       const b = colBase[c] || 'raw';
       const ctrl = numCols[c]
-        ? '<span class="hb' + (b !== 'raw' ? ' on' : '') + '" data-col="' + esc(c) + '" title="Number base (click to cycle: raw → 10 → 16 → 2)">' + baseLbl(b) + '</span>'
+        ? '<span class="hb' + (b !== 'raw' ? ' on' : '') + '" data-col="' + esc(c) + '" title="Number base — click to cycle: raw → bin(2) → dec(10) → hex(16)">' + baseLbl(b) + '</span>'
         : '';
       h += '<th class="' + cls + '" data-col="' + esc(c) + '" draggable="true" ' +
         'title="Click: sort  ·  Drag: reorder  ·  Right-click: columns">' +
