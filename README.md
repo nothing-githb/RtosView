@@ -249,10 +249,15 @@ because they are not on the chain.
 
 If the next index isn't a plain field, `next` may be a **`${expr}` template**
 (like `wrap`) — e.g. `"next": "${expr}.link.idx"`, or a lookup
-`"next": "g_succ[${expr}.id]"`. Here `${expr}` is the **un-wrapped** element — the
-**same** `${expr}` that `wrap` receives — so it means the same thing in both
-places; if you also `cast`/`wrap` to read fields, re-apply that inside the `next`
-template. Without `${expr}`, `next` stays the simple `element<access>next` (using
+`"next": "g_succ[${expr}.id]"`. Two placeholders are available:
+
+- **`${expr}`** — the **un-wrapped** element (the *same* `${expr}` that `wrap`
+  receives, so it means the same thing in both places).
+- **`${wrapped_expr}`** — the element **after** `cast`/`wrap`, so you can reuse
+  the cast without rewriting it: with `wrap: "((node_t *)${expr})"`, write
+  `"next": "${wrapped_expr}->nxt"`.
+
+Without either placeholder, `next` stays the simple `element<access>next` (using
 the wrapped element).
 
 ---

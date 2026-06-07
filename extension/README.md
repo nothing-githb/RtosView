@@ -133,9 +133,10 @@ A list living inside an array, linked by a next-**index** field. Start at `head`
 When the next index isn't a plain field, `next` accepts a **`${expr}` template**
 (like `wrap`) — e.g. `"next": "${expr}.link.idx"` or a lookup
 `"next": "g_succ[${expr}.id]"`. `${expr}` is the **un-wrapped** element — the same
-one `wrap` receives — so it means the same thing in both; if you also `cast`/`wrap`
-to read fields, re-apply that cast inside the `next` template. (The demo's
-`procSlots` uses `"next": "${expr}.next"`.)
+one `wrap` receives, so it means the same thing in both. To reuse a `cast`/`wrap`
+instead of rewriting it, use **`${wrapped_expr}`** (the post-`cast`/`wrap`
+element): with `wrap: "((node_t *)${expr})"`, write `"next": "${wrapped_expr}->nxt"`.
+(The demo's `procSlots` uses `"next": "${expr}.next"`.)
 
 ### Master–detail (`${selected}`)
 

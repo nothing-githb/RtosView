@@ -298,9 +298,10 @@ async function collectSection(
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
-      // next: ${expr} (ham eleman, wrap ile aynı) içeren bir şablon olabilir; yoksa elem<access>next
-      const nextExpr = (cfg.next && cfg.next.indexOf('${expr}') !== -1)
-        ? cfg.next.split('${expr}').join('(' + elemRaw + ')')
+      // next şablonu: ${expr}=ham eleman (wrap ile aynı), ${wrapped_expr}=wrap/cast'li eleman; yoksa elem<access>next
+      const hasTpl = cfg.next && (cfg.next.indexOf('${expr}') !== -1 || cfg.next.indexOf('${wrapped_expr}') !== -1);
+      const nextExpr = hasTpl
+        ? cfg.next.split('${wrapped_expr}').join('(' + elem + ')').split('${expr}').join('(' + elemRaw + ')')
         : `${elem}${access}${cfg.next}`;
       const nxRaw = cleanValue(await gdbExec(session, `print ${nextExpr}`, frameId));
       idx = toI(nxRaw);

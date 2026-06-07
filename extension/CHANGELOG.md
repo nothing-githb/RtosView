@@ -2,6 +2,14 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.19.2] - 2026-06-06
+
+### Added
+- New **`${wrapped_expr}`** placeholder for the `index_list` `next` template — the
+  element **after** `cast`/`wrap` (vs `${expr}`, the un-wrapped element). Lets the
+  `next` template reuse the wrap-cast without rewriting it, e.g. with
+  `wrap: "((node_t *)${expr})"` you can write `"next": "${wrapped_expr}->nxt"`.
+
 ## [0.19.1] - 2026-06-06
 
 ### Changed
