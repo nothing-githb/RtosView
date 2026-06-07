@@ -2,6 +2,12 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.14.1] - 2026-06-06
+
+### Changed
+- Lowercased the publisher id to `halistahasahin` (matches the Marketplace
+  publisher; it was uppercase in the manifest).
+
 ## [0.14.0] - 2026-06-06
 
 ### Changed
