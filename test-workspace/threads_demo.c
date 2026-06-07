@@ -48,6 +48,7 @@ typedef struct {
     int          x;
     int          y;
     const char  *label;
+    int         *xp;       /* &x — 'wrap' (*(${expr})) deref örneği için */
 } widget_t;
 
 typedef struct {
@@ -185,6 +186,7 @@ int main(void)
     g_widget_pool[0].x = 10; g_widget_pool[0].y = 20; g_widget_pool[0].label = "button";
     g_widget_pool[1].x = 30; g_widget_pool[1].y = 40; g_widget_pool[1].label = "slider";
     g_widget_pool[2].x = 50; g_widget_pool[2].y = 60; g_widget_pool[2].label = "label";
+    for (int wi = 0; wi < 3; wi++) g_widget_pool[wi].xp = &g_widget_pool[wi].x;
     g_widgets.data = g_widget_pool;
     g_widgets.size = 3;
 

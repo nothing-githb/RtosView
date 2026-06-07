@@ -70,9 +70,10 @@
     "cast": "widget_t",
     "access": ".",
     "fields": [
-      { "label": "X",     "expr": "x" },
-      { "label": "Y",     "expr": "y" },
-      { "label": "Label", "expr": "label" }
+      { "label": "X",      "expr": "x" },
+      { "label": "Y",      "expr": "y" },
+      { "label": "Label",  "expr": "label" },
+      { "label": "X*",     "expr": "xp", "wrap": "*(${expr})" }
     ]
   }
 }

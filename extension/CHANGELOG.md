@@ -2,6 +2,19 @@
 
 All notable changes to the **RTOS Inspector** extension are documented here.
 
+## [0.13.0] - 2026-06-06
+
+### Added
+- **Per-field `wrap` template.** Post-process the generated access expression
+  with a `${expr}` placeholder — e.g. `"wrap": "*(${expr})"` dereferences a
+  pointer field (`a[5].id` → `*(a[5].id)`). The demo's widgets array gains a
+  dereferenced `X*` column.
+
+### Changed
+- Logging levels clarified: **`debug`** logs every prepared GDB access string;
+  **`trace`** logs each result; GDB access failures are logged as **warnings**
+  (visible at `info`, which otherwise shows only milestones and errors).
+
 ## [0.12.1] - 2026-06-06
 
 ### Changed

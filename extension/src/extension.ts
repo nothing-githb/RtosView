@@ -5,7 +5,11 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 // Tipler
 // ---------------------------------------------------------------------------
-interface FieldCfg { label: string; expr: string; }
+interface FieldCfg {
+  label: string;
+  expr: string;
+  wrap?: string;   // üretilen erişim ifadesini sarmala; ${expr} yer tutucu. Örn "*(${expr})"
+}
 interface SectionCfg {
   mode: 'linked_list' | 'array';
   root: string;
@@ -141,10 +145,14 @@ async function gdbExec(
       frameId
     });
     const out = (resp?.result ?? '').toString();
-    log?.trace(`gdb ▸ ${command}  ⇒  ${out.replace(/\s+/g, ' ').trim()}`);
+    const clean = out.replace(/\s+/g, ' ').trim();
+    log?.debug(`gdb ▸ ${command}`);                 // hazırlanan erişim string'i
+    log?.trace(`gdb ◂ ${clean}`);                   // sonuç
+    if (/no symbol|cannot|not (defined|available)|incomplete|error/i.test(clean))
+      log?.warn(`gdb access failed: ${command}  ⇒  ${clean}`);
     return out;
   } catch (e: any) {
-    log?.trace(`gdb ▸ ${command}  ⇒  <error: ${e?.message ?? e}>`);
+    log?.warn(`gdb access error: ${command}  ⇒  ${e?.message ?? e}`);
     return `<<error: ${e?.message ?? e}>>`;
   }
 }
@@ -210,7 +218,9 @@ async function collectSection(
     for (let i = 0; i < Math.min(count, max); i++) {
       const row: Row = {};
       for (const f of cfg.fields) {
-        const v = await gdbExec(session, `print ${base}[${i}]${access}${f.expr}`, frameId);
+        let fe = `${base}[${i}]${access}${f.expr}`;
+        if (f.wrap) fe = f.wrap.split('${expr}').join(fe);   // post-process, örn *(${expr})
+        const v = await gdbExec(session, `print ${fe}`, frameId);
         row[f.label] = cleanValue(v);
       }
       rows.push(row);
@@ -223,7 +233,9 @@ async function collectSection(
       if (isNull(cur)) break;
       const row: Row = {};
       for (const f of cfg.fields) {
-        const v = await gdbExec(session, `print ${cursor}->${f.expr}`, frameId);
+        let fe = `${cursor}->${f.expr}`;
+        if (f.wrap) fe = f.wrap.split('${expr}').join(fe);   // post-process, örn *(${expr})
+        const v = await gdbExec(session, `print ${fe}`, frameId);
         row[f.label] = cleanValue(v);
       }
       rows.push(row);

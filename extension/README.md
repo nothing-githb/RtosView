@@ -192,6 +192,11 @@ You don't declare types or sizes. Whatever `expr` evaluates to is formatted by
 GDB according to its type: enums render as names (`RUNNING`, `FIFO`), pointers
 as addresses, integers as numbers.
 
+A field may also set a `wrap` template to post-process the generated access
+expression (`${expr}` is that expression). For example
+`{ "label": "Val", "expr": "p", "wrap": "*(${expr})" }` dereferences a pointer
+field.
+
 ## Extension settings
 
 | Setting                | Default            | Description |

@@ -94,6 +94,11 @@ section's JSON key is its tab label (`threads`, `semaphores`, `mutexes`,
 | `max`    | Safety upper bound (default `1024`) |
 | `fields` | List of `{ "label", "expr" }` → the columns to display |
 
+A field may also carry an optional `wrap` template that post-processes the
+generated access expression — `${expr}` is that expression. For example
+`{ "label": "Val", "expr": "p", "wrap": "*(${expr})" }` dereferences a pointer
+field, yielding `*(…->p)`.
+
 ### Example `rtos-inspector.json`
 
 ```json
@@ -244,9 +249,10 @@ GDB tips in comments.
 
 Open **View → Output → "RTOS Inspector"** (or run **"RTOS Inspector: Show Log"**)
 to see what the extension is doing. Raise the level with the gear icon or
-**"Developer: Set Log Level…"**: `debug` shows per-section row counts, the chosen
-columns and the resolved `${selected}` expression; `trace` logs every GDB command
-and its result — handy when a column is empty or a `root` doesn't resolve.
+**"Developer: Set Log Level…"**: `debug` shows per-section row counts/columns, the
+resolved `${selected}`, and **every prepared GDB access string**; `trace` adds
+each command's result. Access failures are logged as warnings (visible at
+`info`) — handy when a column is empty or a `root`/`cast` doesn't resolve.
 
 ## License
 
