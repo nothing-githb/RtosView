@@ -17,7 +17,8 @@ typedef struct tcb {
     thread_state_t  state;
     int             prio;
     void           *stack_base;   /* stack start */
-    unsigned long   stack_size;   /* bytes */
+    unsigned long   stack_size;   /* toplam (bytes) */
+    unsigned long   stack_used;   /* kullanilan (bytes) -> usage bar */
     struct tcb     *next;
 } tcb_t;
 
@@ -192,6 +193,11 @@ int main(void)
     tcb_t *d = mk_thread(4, "logger",   WAITING, 9);
     a->next = b; b->next = NULL;     /* init process'in thread'leri */
     c->next = d; d->next = NULL;     /* worker process'in thread'leri */
+    /* stack kullanimi (toplam 0x4000=16384): usage bar icin yesil/sari/kirmizi */
+    a->stack_used = 0x1000;  /* 25%  yesil */
+    b->stack_used = 0x3d00;  /* 95%  kirmizi */
+    c->stack_used = 0x2a00;  /* 65%  yesil */
+    d->stack_used = 0x3300;  /* ~80% sari */
 
     ksem_t *s0 = mk_sem(1, 0, 1, 2, FIFO);
     ksem_t *s1 = mk_sem(2, 3, 5, 0, PRIORITY);

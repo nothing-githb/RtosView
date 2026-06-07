@@ -35,6 +35,8 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
   collapsible tree grouped under a master section (`groupBy` + `${master}`) — e.g.
   every process's semaphores under its process node — all at once, with a
   Flat-view toggle.
+- **Usage bars.** Render a numeric field as a `used / max · %` bar
+  (green → amber → red) with a field's `"bar"` — e.g. per-thread **stack usage**.
 - **Hide columns by default.** Mark a field `"hidden": true` to start it
   collapsed (and unfetched) until you enable it from the ▦ Columns menu.
 - **Arbitrary root expressions** — anything valid in GDB, e.g.
@@ -134,7 +136,7 @@ Every field, across all modes:
 |-----------|-------|---------|---------|
 | `mode`    | all | — (required) | `"linked_list"`, `"array"`, or `"index_list"`. Selects the traversal. |
 | `root`    | all | — (required) | Starting expression in your program's own syntax (head pointer, array, or buffer). May contain `${master}` (grouping). |
-| `fields`  | all | — (required) | Ordered list of `{ "label", "expr" }` columns. `label` is the header (and first column = row identity); `expr` is the accessor appended after the element. A field may add `"hidden": true` (start collapsed) and/or `"base": "dec"\|"hex"\|"bin"` (default number base). |
+| `fields`  | all | — (required) | Ordered list of `{ "label", "expr" }` columns. `label` is the header (and first column = row identity); `expr` is the accessor appended after the element. A field may add `"hidden": true` (start collapsed), `"base": "dec"\|"hex"\|"bin"` (default number base), and/or `"bar": { "max": "<expr>", "warn": 75, "crit": 90 }` (render as a usage bar). |
 | `next`    | linked_list, index_list | — (set it) | linked_list: the pointer field to the next node (used as `cursor->next`). index_list: the field holding the next **index**, OR a `${expr}` template that computes it (like `wrap` — `${expr}` is the element; e.g. `"${expr}.link.idx"` or `"g_succ[${expr}.id]"`). The traversal uses this verbatim, so set it; it is only assumed to be `next` when building a grouped master's selector expression. |
 | `head`    | index_list | — | Starting **index** expression, read once. May contain `${master}` (grouping). |
 | `nil`     | index_list | `-1` | Sentinel index that ends the walk. May contain `${master}` (grouping). |
@@ -383,6 +385,30 @@ reach `.data` inside the wrap *before* casting:
 `cast` / `wrap` / `access` work exactly as in `array` mode. Write `nil` the way
 GDB prints the index (usually decimal). A visited-set and the `max` bound guard
 against cycles and runaway chains.
+
+### Usage bars (`bar`)
+
+Give a numeric field a `bar` and it renders as a horizontal `used / max · NN%`
+bar, colored green → amber (≥ `warn` %) → red (≥ `crit` %). `bar.max` is a sibling
+expression on the same element (e.g. `stack_size`) or a constant; `warn` / `crit`
+default to 75 / 90. The field's own `expr` is the *used* value.
+
+```json
+{
+  "threads": {
+    "groupBy": "processes",
+    "mode": "linked_list", "root": "${master}->thread_list", "next": "next",
+    "fields": [
+      { "label": "ID", "expr": "id" },
+      { "label": "Name", "expr": "name" },
+      { "label": "Stack", "expr": "stack_used", "bar": { "max": "stack_size", "warn": 75, "crit": 90 } }
+    ]
+  }
+}
+```
+
+This shows each thread's stack usage as `stack_used / stack_size`. Shorthand:
+`"bar": "stack_size"` (default thresholds).
 
 ## Settings
 

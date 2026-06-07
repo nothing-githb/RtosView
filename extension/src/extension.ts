@@ -5,7 +5,10 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 // Tipler
 // ---------------------------------------------------------------------------
-interface FieldCfg { label: string; expr: string; hidden?: boolean; base?: string; }   // hidden: başlangıçta gizli; base: sayısal görüntü tabanı "dec"|"hex"|"bin" (yoksa ham)
+interface FieldCfg {
+  label: string; expr: string; hidden?: boolean; base?: string;   // hidden: başlangıçta gizli; base: "dec"|"hex"|"bin"
+  bar?: string | { max?: string; warn?: number; crit?: number };  // kullanım çubuğu: expr=used, bar.max=toplam (eleman-ifadesi veya sabit), warn/crit eşikleri (%)
+}
 interface SectionCfg {
   mode: 'linked_list' | 'array' | 'index_list';
   root: string;
@@ -28,6 +31,7 @@ interface Group { label: string; key: string; rows: Row[]; }
 interface Section {
   name: string; columnsAll: string[]; hidden: string[]; rows: Row[]; summary: string;
   bases?: Record<string, string>;   // kolon -> config sayı tabanı (dec/hex/bin)
+  bars?: Record<string, { warn: number; crit: number }>;   // kolon -> kullanım çubuğu eşikleri (max değeri row['__bar__'+kolon]'da)
   needsSelection?: boolean;   // gruplu bölüm: master bölüm boş/bulunamadı
   grouped?: boolean;          // groupBy ile ağaç olarak gruplanmış
   groups?: Group[];           // her master elemanı için bir grup
@@ -270,6 +274,10 @@ async function collectSection(
       for (const f of cfg.fields) {
         const v = await gdbExec(session, `print ${elem}${access}${f.expr}`, frameId);
         row[f.label] = cleanValue(v);
+        if (f.bar) {
+          const mx = barMaxExpr(f);
+          if (mx) row['__bar__' + f.label] = /^\d+$/.test(mx) ? mx : cleanValue(await gdbExec(session, `print ${elem}${access}${mx}`, frameId));
+        }
       }
       rows.push(row);
     }
@@ -307,6 +315,10 @@ async function collectSection(
       for (const f of cfg.fields) {
         const v = await gdbExec(session, `print ${elem}${access}${f.expr}`, frameId);
         row[f.label] = cleanValue(v);
+        if (f.bar) {
+          const mx = barMaxExpr(f);
+          if (mx) row['__bar__' + f.label] = /^\d+$/.test(mx) ? mx : cleanValue(await gdbExec(session, `print ${elem}${access}${mx}`, frameId));
+        }
       }
       rows.push(row);
       // next şablonu: ${expr}=ham eleman (wrap ile aynı), ${wrapped_expr}=wrap/cast'li eleman; yoksa elem<access>next
@@ -335,6 +347,10 @@ async function collectSection(
       for (const f of cfg.fields) {
         const v = await gdbExec(session, `print ${elem}->${f.expr}`, frameId);
         row[f.label] = cleanValue(v);
+        if (f.bar) {
+          const mx = barMaxExpr(f);
+          if (mx) row['__bar__' + f.label] = /^\d+$/.test(mx) ? mx : cleanValue(await gdbExec(session, `print ${elem}->${mx}`, frameId));
+        }
       }
       rows.push(row);
       log.trace(`linked_list "${name}" node ${guard - 1}: cursor=${cur} → advance via ${cursor}->${cfg.next}`);
@@ -409,6 +425,19 @@ function fieldBases(fields: FieldCfg[]): Record<string, string> {
   for (const f of fields) if (f.base) m[f.label] = f.base;
   return m;
 }
+// Kullanım çubuğu: max ifadesi + eşikler
+function barMaxExpr(f: FieldCfg): string {
+  if (!f.bar) return '';
+  return (typeof f.bar === 'string' ? f.bar : (f.bar.max ?? '')) || '';
+}
+function fieldBars(fields: FieldCfg[]): Record<string, { warn: number; crit: number }> {
+  const m: Record<string, { warn: number; crit: number }> = {};
+  for (const f of fields) if (f.bar) {
+    const o = typeof f.bar === 'string' ? {} : f.bar;
+    m[f.label] = { warn: typeof o.warn === 'number' ? o.warn : 75, crit: typeof o.crit === 'number' ? o.crit : 90 };
+  }
+  return m;
+}
 
 // Yalnız AKTİF sütunları gdb'den çek (pasif sütunlar için print çalıştırılmaz)
 async function buildSection(
@@ -424,7 +453,7 @@ async function buildSection(
     .filter((f): f is FieldCfg => !!f);
   const rows = await collectSection(session, { ...cfg, fields: effFields }, frameId, cursor, name);
   log?.debug(`section "${name}" (${cfg.mode}, root=${cfg.root}): ${rows.length} row(s); active=[${eff.active.join(', ')}]`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields) };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields), bars: fieldBars(cfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +533,7 @@ async function buildGrouped(
   }
   const total = groups.reduce((a, g) => a + g.rows.length, 0);
   log?.debug(`grouped "${name}" by ${scfg.groupBy}: ${groups.length} group(s), ${total} row(s)`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields) };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -686,13 +715,15 @@ function getHtml(): string {
   }
   th {
     position: sticky; top: 0; z-index: 1;
-    background: var(--vscode-sideBar-background, var(--vscode-editor-background));
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.4px; opacity: 0.7;
+    background: var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.16));
+    color: var(--vscode-foreground);
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; opacity: 1;
+    border-bottom: 2px solid var(--vscode-focusBorder, #3b9eff);
     cursor: pointer; user-select: none;
   }
-  th:hover { opacity: 1; }
-  th.sorted { opacity: 1; }
+  th:hover { background: var(--vscode-list-hoverBackground); }
+  th.sorted { color: var(--vscode-focusBorder, #3b9eff); }
   th.dragging { opacity: 0.4; }
   th.drop-target {
     box-shadow: inset 4px 0 0 #3b9eff;
@@ -739,6 +770,16 @@ function getHtml(): string {
   }
   .hb:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)); }
   .hb.on { opacity: 1; background: rgba(59,158,255,0.28); color: var(--vscode-foreground); }
+
+  /* kullanım çubuğu (stack/progress) */
+  .bar { position: relative; min-width: 120px; height: 16px; border-radius: 4px;
+    background: rgba(128,128,128,0.18); overflow: hidden; }
+  .barfill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+  .barfill.bok   { background: rgba(46,204,113,0.55); }
+  .barfill.bwarn { background: rgba(241,196,15,0.6); }
+  .barfill.bcrit { background: rgba(231,76,60,0.65); }
+  .barlbl { position: relative; z-index: 1; display: block; text-align: center; font-size: 11px;
+    line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
@@ -1018,15 +1059,16 @@ function getHtml(): string {
     vscodeApi.postMessage({ type: 'copy', text: text });
   }
 
-  function headerCells(columns, sortCol, sortDir, numCols, colBase) {
-    numCols = numCols || {}; colBase = colBase || {};
+  function headerCells(columns, sortCol, sortDir, numCols, colBase, bars) {
+    numCols = numCols || {}; colBase = colBase || {}; bars = bars || {};
     let h = '';
     for (const c of columns) {
+      const isNum = numCols[c] && !bars[c];   // bar kolonlarında base/sağa-hizalama yok
       const active = c === sortCol;
       const ind = active ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
-      const cls = ((active ? 'sorted' : '') + (numCols[c] ? ' num' : '')).trim();
+      const cls = ((active ? 'sorted' : '') + (isNum ? ' num' : '')).trim();
       const b = colBase[c] || 'raw';
-      const ctrl = numCols[c]
+      const ctrl = isNum
         ? '<span class="hb' + (b !== 'raw' ? ' on' : '') + '" data-col="' + esc(c) + '" title="Number base — click to cycle: raw → bin(2) → dec(10) → hex(16)">' + baseLbl(b) + '</span>'
         : '';
       h += '<th class="' + cls + '" data-col="' + esc(c) + '" draggable="true" ' +
@@ -1044,16 +1086,29 @@ function getHtml(): string {
     }
     return rows;
   }
+  function barCell(used, mx, meta) {
+    if (used === null || mx === null || mx <= 0) return esc(used === null ? '-' : String(used));
+    const pct = Math.max(0, Math.min(100, used / mx * 100));
+    const cls = pct >= meta.crit ? 'bcrit' : (pct >= meta.warn ? 'bwarn' : 'bok');
+    const lbl = used + ' / ' + mx + ' · ' + pct.toFixed(0) + '%';
+    return '<div class="bar"><div class="barfill ' + cls + '" style="width:' + pct.toFixed(1) + '%"></div><span class="barlbl">' + esc(lbl) + '</span></div>';
+  }
   function dataRow(columns, row, changed, opts) {
     opts = opts || {};
     const numCols = opts.numCols || {};
     const colBase = opts.colBase || {};
+    const bars = opts.bars || {};
     const rk = rowKeyOf(row, columns);
     let h = '<tr>';
     for (const c of columns) {
       const ck = rk + '\\u0000' + c;
       const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
       const raw = row[c] ?? '';
+      if (bars[c]) {   // kullanım çubuğu
+        const inner = barCell(toIntVal(raw), toIntVal(row['__bar__' + c]), bars[c]);
+        h += '<td' + (isChg ? ' class="changed"' : '') + ' title="' + esc(raw + ' / ' + (row['__bar__' + c] || '?')) + '">' + inner + '</td>';
+        continue;
+      }
       const b = colBase[c] || 'raw';
       const disp = (b !== 'raw' && !isDash(raw) && toIntVal(raw) !== null) ? fmtNum(raw, b) : raw;
       const classes = [];
@@ -1073,14 +1128,14 @@ function getHtml(): string {
   function buildTable(columns, rows, sortCol, sortDir, changed, opts) {
     if (!rows.length) return '<div class="empty">List is empty (root is NULL or count is 0).</div>';
     const data = sortRows(rows, columns, sortCol, sortDir);
-    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase) + '</tr></thead><tbody>';
+    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase, opts && opts.bars) + '</tr></thead><tbody>';
     for (const row of data) h += dataRow(columns, row, changed, opts);
     return h + '</tbody></table>';
   }
   // groupBy: master düğümleri + altında satırlar (aç/kapa)
   function buildGroupedTable(columns, groups, collapsed, sortCol, sortDir, opts) {
     if (!groups || !groups.length) return '<div class="empty">No groups (master section is empty).</div>';
-    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase) + '</tr></thead><tbody>';
+    let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase, opts && opts.bars) + '</tr></thead><tbody>';
     for (const g of groups) {
       const isCol = collapsed.indexOf(g.key) !== -1;
       h += '<tr class="grphdr" data-grp="' + esc(g.key) + '"><td colspan="' + columns.length + '">' +
@@ -1112,7 +1167,7 @@ function getHtml(): string {
     const allRows = grouped ? st.sec.groups.reduce((a, g) => a.concat(g.rows), []) : st.sec.rows;
     const numCols = numericCols(cols, allRows);
     st.numCols = numCols;   // ▦ Columns menüsü per-kolon base düğmesi için kullanır
-    const opts = { numCols: numCols, colBase: st.colBase || {} };
+    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {} };
     const summary = '<div class="summary">' + esc(st.sec.summary) + '</div>';
     const bar = toolbarHtml(st);
     let table;

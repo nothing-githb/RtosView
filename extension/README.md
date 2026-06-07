@@ -23,6 +23,8 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
   collapsible tree grouped under a master section (`groupBy` + `${master}`) — e.g.
   every process's semaphores under its process node — all at once, with a
   flat-view toggle.
+- **Usage bars.** Render a numeric field as a `used / max · %` bar
+  (green → amber → red) with a field's `"bar"` — e.g. per-thread **stack usage**.
 - **Hide columns by default.** Mark a field `"hidden": true` to start it collapsed
   (and unfetched) until you enable it from the ▦ Columns menu.
 - **Readable UI.** Recognized columns get automatic styling: a `State` column becomes a colored badge (RUNNING / READY / BLOCKED / WAITING), a `Count` of `0` is flagged red, `Waiting > 0` amber, plus a summary line per tab.
@@ -63,7 +65,7 @@ The config file (default `rtos-inspector.json`) is a JSON object that is a **map
 | `label`   | master sections             | Expression evaluated on the master element to title each tree node when another section groups by this one. |
 | `groupBy` | grouping sections           | Names a master section; renders this section as a collapsible tree, one group per master element (use `${master}` in `root`/`head`/`count`/`nil`). |
 | `max`     | all                         | Traversal upper bound / safety guard (default `1024`). |
-| `fields`  | all *(required)*            | Ordered list of `{ "label", "expr" }` columns (first column = row identity). A field may add `"hidden": true` (start collapsed/unfetched) and/or `"base": "dec"\|"hex"\|"bin"` (default number base). |
+| `fields`  | all *(required)*            | Ordered list of `{ "label", "expr" }` columns (first column = row identity). A field may add `"hidden": true` (start collapsed/unfetched), `"base": "dec"\|"hex"\|"bin"` (default number base), and/or `"bar": { "max": "<expr>", "warn": 75, "crit": 90 }` (render as a usage bar — `expr` = used, `max` = total). |
 
 #### Notes on the subtle fields
 

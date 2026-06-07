@@ -1,5 +1,5 @@
 {
-  "//": "İlişki = gruplama (groupBy + ${master}): 'semaphores' ve 'procSlots' 'processes' altında ağaç olarak, tıklamadan, tek seferde gelir. 'processes' bağımsız bir liste (label=name düğüm başlığını verir). 'timers/widgets/slots/boxes/pool' bağımsız.",
+  "//": "İlişki = gruplama (groupBy + ${master}): 'threads'/'semaphores'/'procSlots' 'processes' altında ağaç olarak, tıklamadan gelir. 'threads' Stack kolonu stack_used/stack_size kullanım çubuğu (bar). 'processes' bağımsız liste (label=name). 'timers/widgets/slots/boxes/pool' bağımsız.",
 
   "processes": {
     "mode": "linked_list",
@@ -12,6 +12,19 @@
     ]
   },
 
+  "//threads": "processes altında ağaç. 'Stack' kolonu = stack_used / stack_size kullanım çubuğu (warn 75%, crit 90%).",
+  "threads": {
+    "groupBy": "processes",
+    "mode": "linked_list",
+    "root": "${master}->thread_list",
+    "next": "next",
+    "fields": [
+      { "label": "ID",    "expr": "id" },
+      { "label": "Name",  "expr": "name" },
+      { "label": "State", "expr": "state" },
+      { "label": "Stack", "expr": "stack_used", "bar": { "max": "stack_size", "warn": 75, "crit": 90 } }
+    ]
+  },
 
   "semaphores": {
     "groupBy": "processes",

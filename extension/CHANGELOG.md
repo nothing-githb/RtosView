@@ -2,6 +2,19 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.23.0] - 2026-06-06
+
+### Added
+- **Usage bars.** A field can set **`"bar"`** to render its value as a horizontal
+  usage bar — `used / max · NN%` with green → amber → red thresholds. `bar.max` is
+  a sibling expression (e.g. `stack_size`) or a constant; `warn` / `crit` set the
+  percent thresholds (default 75 / 90). The demo's `threads` tab shows per-thread
+  **stack usage** (`stack_used` / `stack_size`).
+
+### Changed
+- **Column headers are more visible** — full-contrast text on a header-tint
+  background with a 2px blue underline; the sorted column's title is blue.
+
 ## [0.22.3] - 2026-06-06
 
 ### Changed
