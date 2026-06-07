@@ -2,6 +2,14 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.22.1] - 2026-06-06
+
+### Changed
+- The per-column number base is now chosen from a **`10 / 16 / 2`** selector in
+  the **column header's top-right** (dec / hex / bin; the active one is
+  highlighted, click it again to reset to raw) — instead of a button in the ▦
+  Columns menu. Quicker and visible at a glance.
+
 ## [0.22.0] - 2026-06-06
 
 ### Changed

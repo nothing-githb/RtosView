@@ -731,13 +731,14 @@ function getHtml(): string {
 
   /* sayısal kolonlar sağa hizalı + tabular figürler (tam değer her hücrede title'da) */
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .basetag { font-size: 9px; opacity: 0.6; margin-left: 4px; font-weight: 600; vertical-align: super; }
-  .col-base {
-    margin-left: auto; font-size: 10px; padding: 1px 7px; border-radius: 4px; cursor: pointer; min-width: 30px;
-    border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); background: transparent;
-    color: var(--vscode-foreground); font-family: var(--vscode-editor-font-family, monospace);
+  /* başlık sağ üstü: per-kolon sayı tabanı seçici (10 / 16 / 2) */
+  .hbase { float: right; display: inline-flex; gap: 1px; margin-left: 8px; font-size: 9px; font-weight: 700; }
+  .hb {
+    cursor: pointer; padding: 0 3px; border-radius: 3px; opacity: 0.45;
+    font-family: var(--vscode-editor-font-family, monospace);
   }
-  .col-base:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)); }
+  .hb:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)); }
+  .hb.on { opacity: 1; background: rgba(59,158,255,0.28); color: var(--vscode-foreground); }
 
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
@@ -949,8 +950,6 @@ function getHtml(): string {
     if (base === 'bin') return (n < 0 ? '-0b' + (-n).toString(2) : '0b' + n.toString(2));
     return String(n); // dec
   }
-  function nextBase(b) { return b === 'dec' ? 'hex' : b === 'hex' ? 'bin' : b === 'bin' ? 'raw' : 'dec'; }
-  function baseLbl(b) { return b === 'hex' ? '0x' : b === 'bin' ? '0b' : b === 'dec' ? '10' : '—'; }
   function numericCols(columns, rows) {
     const set = {};
     for (const c of columns) {
@@ -1025,10 +1024,14 @@ function getHtml(): string {
       const ind = active ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
       const cls = ((active ? 'sorted' : '') + (numCols[c] ? ' num' : '')).trim();
       const b = colBase[c] || 'raw';
-      const tag = (b !== 'raw') ? '<span class="basetag">' + baseLbl(b) + '</span>' : '';
+      let ctrl = '';
+      if (numCols[c]) {
+        const opt = (bb, lbl) => '<span class="hb' + (b === bb ? ' on' : '') + '" data-col="' + esc(c) + '" data-base="' + bb + '" title="' + bb + '">' + lbl + '</span>';
+        ctrl = '<span class="hbase" title="Number base — 10 dec · 16 hex · 2 bin (click active to reset)">' + opt('dec', '10') + opt('hex', '16') + opt('bin', '2') + '</span>';
+      }
       h += '<th class="' + cls + '" data-col="' + esc(c) + '" draggable="true" ' +
         'title="Click: sort  ·  Drag: reorder  ·  Right-click: columns">' +
-        esc(c) + tag + '<span class="sort-ind">' + ind + '</span></th>';
+        ctrl + esc(c) + '<span class="sort-ind">' + ind + '</span></th>';
     }
     return h;
   }
@@ -1129,18 +1132,12 @@ function getHtml(): string {
     const st = secState[name];
     if (!menu) return;
     if (!st) { menu.innerHTML = ''; return; }
-    const numCols = st.numCols || {};
-    const colBase = st.colBase || {};
-    let h = '<div class="cols-title">Columns — drag to reorder · base for numbers</div>';
+    let h = '<div class="cols-title">Columns — drag to reorder, toggle visibility</div>';
     st.order.forEach(label => {
       const checked = st.hidden.indexOf(label) === -1 ? ' checked' : '';
-      const baseBtn = numCols[label]
-        ? '<button class="col-base" data-label="' + esc(label) + '" title="Number base: dec → hex → bin → raw">' + baseLbl(colBase[label] || 'raw') + '</button>'
-        : '';
       h += '<div class="cols-item" data-label="' + esc(label) + '" draggable="true">' +
         '<span class="cols-grip" title="Drag to reorder">⠿</span>' +
         '<label><input type="checkbox" data-act="vis"' + checked + '> ' + esc(label) + '</label>' +
-        baseBtn +
         '</div>';
     });
     menu.innerHTML = h;
@@ -1234,15 +1231,17 @@ function getHtml(): string {
       }
       return;
     }
-    // per-kolon sayı tabanı (▦ menüsü içindeki düğme) — cols-menu stopProp'tan ÖNCE
-    const baseBtn = e.target.closest('.col-base');
-    if (baseBtn) {
+    if (e.target.closest('.cols-menu')) { e.stopPropagation(); return; }
+    // başlık sağ üstü taban seçici (10/16/2) — th-sort'tan ÖNCE
+    const hb = e.target.closest('.hb');
+    if (hb) {
       const name = paneName(e); const st = secState[name];
-      if (st) { st.colBase = st.colBase || {}; const l = baseBtn.dataset.label; st.colBase[l] = nextBase(st.colBase[l] || 'raw'); paint(name); buildColsMenu(name); }
+      if (st) { st.colBase = st.colBase || {}; const l = hb.dataset.col, nb = hb.dataset.base;
+        st.colBase[l] = (st.colBase[l] === nb) ? 'raw' : nb;   // aynı tabana tıkla -> raw
+        paint(name); }
       e.stopPropagation();
       return;
     }
-    if (e.target.closest('.cols-menu')) { e.stopPropagation(); return; }
     // grup: düz/ağaç görünüm geçişi
     if (e.target.closest('.grp-toggle')) {
       const name = paneName(e); const st = secState[name];
@@ -1321,6 +1320,7 @@ function getHtml(): string {
       setGhost(e, menuDragLabel);
       return;
     }
+    if (e.target.closest('.hb')) { e.preventDefault(); return; }   // taban seçicide sürükleme başlatma
     const th = e.target.closest('th[data-col]');
     if (!th) return;
     suppressClick = false;
