@@ -28,8 +28,9 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
 - **Hide columns by default.** Mark a field `"hidden": true` to start it collapsed
   (and unfetched) until you enable it from the ▦ Columns menu.
 - **Manage sections (tabs).** Hide/show whole sections from the **▤ Sections** menu
-  and **drag tabs** to reorder — remembered per workspace. A section can also start
-  hidden with `"hidden": true` in config.
+  and reorder by **dragging a tab** (or a row in the menu) — instant (client-side),
+  remembered per workspace. A section can also start hidden with `"hidden": true`
+  in config.
 - **Readable UI.** Recognized columns get automatic styling: a `State` column becomes a colored badge (RUNNING / READY / BLOCKED / WAITING), a `Count` of `0` is flagged red, `Waiting > 0` amber, plus a summary line per tab.
 - **Read-only & safe.** Debug Inspector only *reads* your data — it never calls functions or writes your program's memory, so program state is never disturbed.
 - **Leveled, color-coded logging.** A *Debug Inspector* Output channel (rendered with the `log` syntax so timestamps/severities/values are colorized); pick `off` / `info` / `debug`.

@@ -2,6 +2,24 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.25.0] - 2026-06-07
+
+### Changed
+- **Reordering and hiding sections (tabs) is now instant.** It no longer triggers
+  a full GDB re-read of every section — the panel reorders/hides client-side from
+  cached data, exactly like columns. Only *showing* a previously-hidden section
+  refetches (it had no data while hidden).
+
+### Added
+- **Drag-to-reorder rows inside the ▤ Sections menu** (with grips), like the
+  Columns menu — in addition to dragging the tabs themselves.
+
+### Fixed
+- **Section order no longer scrambles** when you hide / show / reorder. Order is
+  now one interleaved list end-to-end, so hidden sections keep their place and a
+  re-shown section returns to its slot instead of jumping to the end. Hiding the
+  active tab now focuses a neighbor instead of the first tab.
+
 ## [0.24.1] - 2026-06-06
 
 ### Added

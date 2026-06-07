@@ -40,8 +40,9 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
 - **Hide columns by default.** Mark a field `"hidden": true` to start it
   collapsed (and unfetched) until you enable it from the ▦ Columns menu.
 - **Manage sections (tabs).** Hide/show whole sections from the **▤ Sections**
-  menu and **drag tabs** to reorder — remembered per workspace (hidden sections
-  aren't fetched). A section can also start hidden with `"hidden": true` in config.
+  menu and reorder by **dragging a tab** (or a row in the menu) — instant
+  (client-side), remembered per workspace. A section can also start hidden with
+  `"hidden": true` in config.
 - **Arbitrary root expressions** — anything valid in GDB, e.g.
   `g_kernel.pools[0]->thread_list`.
 - **Generic `void*` buffers.** Reinterpret an untyped buffer as a typed array

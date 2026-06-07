@@ -590,6 +590,7 @@ async function refresh(session: vscode.DebugSession, threadId: number) {
     type: 'update',
     sections,
     hiddenSections: order.filter(n => hiddenSet.has(n)),
+    order,   // TEK interleaved sıra (görünür+gizli) -> webview istemci-tarafı reorder/hide için
     ts: new Date().toLocaleTimeString()
   });
 }
@@ -630,9 +631,10 @@ function openPanel(context: vscode.ExtensionContext) {
           hidden: Array.isArray(msg.hidden) ? msg.hidden : [],
           touched: true   // kullanıcı seçim yaptı: bundan sonra config "hidden" yoksayılır
         };
-        log?.debug(`webview: setSections order=[${sectionPrefs.order.join(', ')}] hidden=[${sectionPrefs.hidden.join(', ')}]`);
+        log?.debug(`webview: setSections order=[${sectionPrefs.order.join(', ')}] hidden=[${sectionPrefs.hidden.join(', ')}] reveal=${msg.reveal || '-'}`);
         extContext?.workspaceState.update(SECPREF_KEY, sectionPrefs);
-        doRefresh();
+        // reorder/hide tamamen istemci-tarafı (GDB yok); SADECE gizli bir bölüm gösterilince yeniden çek
+        if (msg.reveal) doRefresh();
       }
     },
     null,
@@ -860,8 +862,9 @@ function getHtml(): string {
   const panesEl = document.getElementById('panes');
 
   const secState = {};       // name -> {sec, sortCol, sortDir, changed, changeCount, order, hidden}
-  let currentNames = [];     // ordered section names matching DOM indices
+  let currentNames = [];     // görünür sekme adları (DOM index'leriyle eşleşir)
   let hiddenSections = [];   // gizli sekme adları (Sections menüsünden açılabilir)
+  let sectionOrder = [];     // TEK interleaved sıra (görünür+gizli), gerçek konumda
   let activeName = null;
 
   document.getElementById('refresh').addEventListener('click', () => {
@@ -1293,8 +1296,8 @@ function getHtml(): string {
   let dragCol = null, dragName = null, suppressClick = false;
   let menuDragLabel = null, menuDragName = null, dragGhost = null;
   function clearDropMarks() {
-    for (const x of panesEl.querySelectorAll('.drop-target')) x.classList.remove('drop-target');
-    for (const x of panesEl.querySelectorAll('.drop-row')) x.classList.remove('drop-row');
+    for (const x of document.querySelectorAll('.drop-target')) x.classList.remove('drop-target');
+    for (const x of document.querySelectorAll('.drop-row')) x.classList.remove('drop-row');
   }
   // Sürüklenen öğenin imleci takip eden net önizlemesi (çip)
   function setGhost(e, label) {
@@ -1505,17 +1508,41 @@ function getHtml(): string {
     for (const mm of document.querySelectorAll('.cols-menu')) mm.classList.add('hidden');
   });
 
-  // --- Sections (tabs): gizle/göster (menü) + sürükle-sırala (sekmeler) ---
+  // --- Sections (tabs): istemci-tarafı gizle/sırala (columns modeli) + menü/sekme sürükle ---
+  // sectionOrder = TEK interleaved liste (görünür+gizli, gerçek sırada). reveal: gizliyi gösterirken yeniden çek.
   const secMenu = document.getElementById('sections-menu');
   const secBtn = document.getElementById('sections-btn');
-  function sendSections(order, hidden) { vscodeApi.postMessage({ type: 'setSections', order: order, hidden: hidden }); }
+  function sendSections(reveal) {
+    vscodeApi.postMessage({ type: 'setSections', order: sectionOrder.slice(), hidden: hiddenSections.slice(), reveal: reveal || null });
+  }
+  function visibleFromOrder() { return sectionOrder.filter(n => hiddenSections.indexOf(n) === -1); }
+  // saf yardımcı: order içinde fromName'i toName'in (sürükleme-öncesi) yerine taşı (columns ile aynı semantik)
+  function computeReorder(order, fromName, toName) {
+    const o = order.slice(); const f = o.indexOf(fromName), t = o.indexOf(toName);
+    if (f === -1 || t === -1 || f === t) return o;
+    o.splice(f, 1); o.splice(t, 0, fromName); return o;
+  }
+  function neighborVisible(name) {
+    const vis = visibleFromOrder(); if (!vis.length) return null;
+    const oi = sectionOrder.indexOf(name);
+    let best = vis[0], bestd = Infinity;
+    for (const v of vis) { const d = Math.abs(sectionOrder.indexOf(v) - oi); if (d < bestd) { bestd = d; best = v; } }
+    return best;
+  }
+  // skeleton'ı yeni sırada yeniden kur, her bölümü secState ÖNBELLEĞİNDEN yeniden paint et (GDB YOK)
+  function applySectionLayout() {
+    const vis = visibleFromOrder();
+    currentNames = [];                 // ensureLayout erken-dönüşünü kır -> her zaman yeniden kur
+    ensureLayout(vis);                 // tabs/panes iskeleti + currentNames + applyActive
+    for (const name of vis) if (secState[name] && secState[name].sec) { paint(name); buildColsMenu(name); }
+  }
   function buildSectionsMenu() {
-    const all = currentNames.concat(hiddenSections);
-    let h = '<div class="cols-title">Sections — show / hide</div>';
-    if (!all.length) h += '<div class="cols-item">—</div>';
-    all.forEach(n => {
+    let h = '<div class="cols-title">Sections — drag to reorder, toggle visibility</div>';
+    if (!sectionOrder.length) h += '<div class="cols-item">—</div>';
+    sectionOrder.forEach(n => {
       const checked = hiddenSections.indexOf(n) === -1 ? ' checked' : '';
-      h += '<div class="cols-item" data-sec="' + esc(n) + '">' +
+      h += '<div class="cols-item" data-sec="' + esc(n) + '" draggable="true">' +
+        '<span class="cols-grip" title="Drag to reorder">⠿</span>' +
         '<label><input type="checkbox" data-act="secvis"' + checked + '> ' + esc(cap(n)) + '</label></div>';
     });
     secMenu.innerHTML = h;
@@ -1538,12 +1565,53 @@ function getHtml(): string {
     const cb = e.target.closest('input[data-act="secvis"]');
     if (!cb) return;
     const n = cb.closest('.cols-item').dataset.sec;
-    let hid = hiddenSections.slice();
-    if (cb.checked) { hid = hid.filter(x => x !== n); }
-    else { if (currentNames.length <= 1) { cb.checked = true; return; } if (hid.indexOf(n) === -1) hid.push(n); }
-    sendSections(currentNames.concat(hiddenSections), hid);
+    if (cb.checked) {
+      // GÖSTER: gizli bölümün verisi yok (gizliyken çekilmez) -> reveal ile tazele
+      hiddenSections = hiddenSections.filter(x => x !== n);
+      buildSectionsMenu();
+      sendSections(n);
+    } else {
+      // GİZLE: en az 1 görünür kalmalı; istemci-tarafı (GDB yok)
+      if (visibleFromOrder().length <= 1) { cb.checked = true; return; }
+      if (hiddenSections.indexOf(n) === -1) hiddenSections.push(n);
+      if (activeName === n) activeName = neighborVisible(n);
+      buildSectionsMenu();
+      applySectionLayout();
+      sendSections(null);
+    }
   });
-  // sekme sürükle-sırala
+  // Sections menüsü satır sürükle-sırala (columns menüsü gibi: grip + drop-row)
+  let menuDragSec = null;
+  secMenu.addEventListener('dragstart', e => {
+    const item = e.target.closest('.cols-item[data-sec]'); if (!item) return;
+    menuDragSec = item.dataset.sec;
+    item.classList.add('row-dragging');
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', menuDragSec); }
+    setGhost(e, cap(menuDragSec));
+  });
+  secMenu.addEventListener('dragover', e => {
+    if (menuDragSec == null) return;
+    const item = e.target.closest('.cols-item[data-sec]'); if (!item) return;
+    e.preventDefault(); clearDropMarks(); item.classList.add('drop-row');
+  });
+  secMenu.addEventListener('drop', e => {
+    if (menuDragSec == null) return;
+    const item = e.target.closest('.cols-item[data-sec]');
+    if (item) {
+      e.preventDefault();
+      const target = item.dataset.sec;
+      if (target !== menuDragSec) {
+        sectionOrder = computeReorder(sectionOrder, menuDragSec, target);
+        buildSectionsMenu(); applySectionLayout(); sendSections(null);
+      }
+    }
+    menuDragSec = null; clearDropMarks();
+  });
+  secMenu.addEventListener('dragend', () => {
+    menuDragSec = null; clearGhost(); clearDropMarks();
+    for (const x of secMenu.querySelectorAll('.row-dragging')) x.classList.remove('row-dragging');
+  });
+  // sekme sürükle-sırala (sectionOrder üzerinde, istemci-tarafı)
   let tabDrag = null;
   tabsEl.addEventListener('dragstart', e => {
     const t = e.target.closest('.tab[data-idx]'); if (!t) return;
@@ -1563,11 +1631,9 @@ function getHtml(): string {
     const t = e.target.closest('.tab[data-idx]'); if (!t) { tabDrag = null; return; }
     e.preventDefault();
     const target = currentNames[+t.dataset.idx];
-    if (target !== tabDrag) {
-      const vis = currentNames.slice();
-      vis.splice(vis.indexOf(tabDrag), 1);
-      vis.splice(vis.indexOf(target), 0, tabDrag);
-      sendSections(vis.concat(hiddenSections), hiddenSections.slice());
+    if (target && target !== tabDrag) {
+      sectionOrder = computeReorder(sectionOrder, tabDrag, target);
+      applySectionLayout(); sendSections(null);
     }
     tabDrag = null;
     for (const x of tabsEl.querySelectorAll('.tab')) x.classList.remove('drop-target');
@@ -1584,6 +1650,7 @@ function getHtml(): string {
       tsEl.textContent = m.ts ? ('updated ' + m.ts) : '';
       const list = Array.isArray(m.sections) ? m.sections : [];
       hiddenSections = Array.isArray(m.hiddenSections) ? m.hiddenSections : [];
+      sectionOrder = Array.isArray(m.order) ? m.order.slice() : list.map(s => s.name).concat(hiddenSections);
       ensureLayout(list.map(s => s.name));
       for (const k of Object.keys(secState))
         if (list.findIndex(s => s.name === k) === -1) delete secState[k];
