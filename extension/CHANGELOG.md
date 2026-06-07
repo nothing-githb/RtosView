@@ -2,6 +2,13 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.25.3] - 2026-06-08
+
+### Fixed
+- The top-bar **"N changed"** badge now counts only **visible (open) sections**.
+  Hiding a section recomputes it so a hidden section's changes drop out of the
+  total; the per-tab "changed" markers are also restored after a reorder/hide.
+
 ## [0.25.2] - 2026-06-08
 
 ### Fixed

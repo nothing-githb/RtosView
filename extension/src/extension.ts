@@ -1534,12 +1534,26 @@ function getHtml(): string {
     const st = secState[name]; const cnt = cntElOf(name);
     if (st && st.sec && cnt) cnt.textContent = st.sec.grouped ? (st.sec.groups || []).reduce((a, g) => a + g.rows.length, 0) : st.sec.rows.length;
   }
+  // "N changed" rozetini SADECE görünür (açık) bölümlerin değişiklik sayısından hesapla
+  function recomputeChanged() {
+    let total = 0;
+    for (const name of currentNames) { const st = secState[name]; if (st) total += (st.changeCount || 0); }
+    const chEl = document.getElementById('changes');
+    if (!chEl) return;
+    if (total > 0) { chEl.textContent = total + ' changed'; chEl.classList.remove('hidden'); }
+    else chEl.classList.add('hidden');
+  }
   function applySectionLayout() {
     const vis = visibleFromOrder();
     currentNames = [];                 // ensureLayout erken-dönüşünü kır -> her zaman yeniden kur
     ensureLayout(vis);                 // tabs/panes iskeleti + currentNames + applyActive
-    // iskelet yeniden kurulduğu için sekme sayaçları 0'lanır; secState önbelleğinden geri yaz
-    for (const name of vis) if (secState[name] && secState[name].sec) { paint(name); buildColsMenu(name); setTabCount(name); }
+    // iskelet yeniden kurulduğu için sekme sayaç/haschg sıfırlanır; secState önbelleğinden geri yaz
+    for (const name of vis) if (secState[name] && secState[name].sec) {
+      paint(name); buildColsMenu(name); setTabCount(name);
+      const st = secState[name]; const tab = tabElOf(name);
+      if (tab) { if (st.changeCount > 0 && name !== activeName) tab.classList.add('haschg'); else tab.classList.remove('haschg'); }
+    }
+    recomputeChanged();   // gizlenen bölümün değişiklikleri toplamdan düşsün
   }
   function buildSectionsMenu() {
     let h = '<div class="cols-title">Sections — drag to reorder, toggle visibility</div>';
