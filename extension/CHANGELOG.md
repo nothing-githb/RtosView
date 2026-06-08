@@ -2,6 +2,17 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.27.0] - 2026-06-08
+
+### Added
+- **Cross-reference links.** A field can declare
+  **`"link": { "section": "<target>", "match": "<column>" }`** to render its value
+  as a clickable link to another object. Clicking switches to the target section
+  and highlights the row whose `match` column equals the value (expanding a
+  collapsed group, or revealing a hidden tab, as needed). `match` defaults to the
+  target's first column. The demo's `mutexes` tab links **Owner → the owning thread**
+  in `threads`.
+
 ## [0.26.0] - 2026-06-08
 
 ### Added

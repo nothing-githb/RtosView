@@ -8,6 +8,7 @@ import * as path from 'path';
 interface FieldCfg {
   label: string; expr: string; hidden?: boolean; base?: string;   // hidden: başlangıçta gizli; base: "dec"|"hex"|"bin"
   bar?: string | { max?: string; warn?: number; crit?: number };  // kullanım çubuğu: expr=used, bar.max=toplam (eleman-ifadesi veya sabit), warn/crit eşikleri (%)
+  link?: { section: string; match?: string };  // çapraz-referans: değeri hedef bölümün 'match' kolonuyla eşleştir; tıklayınca oraya git (match yoksa hedefin ilk kolonu)
 }
 interface SectionCfg {
   mode: 'linked_list' | 'array' | 'index_list';
@@ -33,6 +34,7 @@ interface Section {
   name: string; columnsAll: string[]; hidden: string[]; rows: Row[]; summary: string;
   bases?: Record<string, string>;   // kolon -> config sayı tabanı (dec/hex/bin)
   bars?: Record<string, { warn: number; crit: number }>;   // kolon -> kullanım çubuğu eşikleri (max değeri row['__bar__'+kolon]'da)
+  links?: Record<string, { section: string; match?: string }>;   // kolon -> çapraz-referans hedefi (section + match kolonu)
   needsSelection?: boolean;   // gruplu bölüm: master bölüm boş/bulunamadı
   grouped?: boolean;          // groupBy ile ağaç olarak gruplanmış
   groups?: Group[];           // her master elemanı için bir grup
@@ -450,6 +452,12 @@ function fieldBars(fields: FieldCfg[]): Record<string, { warn: number; crit: num
   }
   return m;
 }
+// Kolon -> çapraz-referans hedefi (field.link verilmişse)
+function fieldLinks(fields: FieldCfg[]): Record<string, { section: string; match?: string }> {
+  const m: Record<string, { section: string; match?: string }> = {};
+  for (const f of fields) if (f.link && f.link.section) m[f.label] = { section: f.link.section, match: f.link.match };
+  return m;
+}
 
 // Yalnız AKTİF sütunları gdb'den çek (pasif sütunlar için print çalıştırılmaz)
 async function buildSection(
@@ -465,7 +473,7 @@ async function buildSection(
     .filter((f): f is FieldCfg => !!f);
   const rows = await collectSection(session, { ...cfg, fields: effFields }, frameId, cursor, name);
   log?.debug(`section "${name}" (${cfg.mode}, root=${cfg.root}): ${rows.length} row(s); active=[${eff.active.join(', ')}]`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields), bars: fieldBars(cfg.fields) };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields), bars: fieldBars(cfg.fields), links: fieldLinks(cfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -545,7 +553,7 @@ async function buildGrouped(
   }
   const total = groups.reduce((a, g) => a + g.rows.length, 0);
   log?.debug(`grouped "${name}" by ${scfg.groupBy}: ${groups.length} group(s), ${total} row(s)`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields) };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields), links: fieldLinks(scfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -818,6 +826,12 @@ function getHtml(): string {
   .barlbl { position: relative; z-index: 1; display: block; text-align: center; font-size: 11px;
     line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+  /* çapraz-referans link + hedef satır vurgusu */
+  .xref { color: var(--vscode-textLink-foreground, #3b9eff); cursor: pointer; text-decoration: none; }
+  .xref:hover { text-decoration: underline; }
+  @keyframes rowflash { from { background: rgba(59,158,255,0.55); } to { background: transparent; } }
+  tbody tr.rowflash td { animation: rowflash 1.6s ease-out; }
+
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
   .s-ready { background: rgba(52,152,219,0.18); color: #3498db; }
@@ -934,6 +948,54 @@ function getHtml(): string {
     const t = tabElOf(name);
     if (t) t.classList.remove('haschg');
     applyActive();
+  }
+
+  // çapraz-referans: hedef bölüme git ve 'match' kolonu 'value' olan satırı vurgula
+  function gotoXref(targetSec, matchCol, value) {
+    if (!targetSec) return;
+    if (currentNames.indexOf(targetSec) === -1) {
+      // hedef gizli: göster (veri async gelir; bu turda vurgulanamaz)
+      if (sectionOrder.indexOf(targetSec) !== -1) {
+        hiddenSections = hiddenSections.filter(x => x !== targetSec);
+        buildSectionsMenu(); sendSections(targetSec);
+      }
+      return;
+    }
+    const st = secState[targetSec];
+    if (st && st.sec) {
+      const vis = st.order.filter(l => st.hidden.indexOf(l) === -1);
+      if (!matchCol) matchCol = vis[0];
+      // gruplu ağaçta: eşleşen satırın grubunu (kapalıysa) aç ki DOM'da render olsun
+      if (st.sec.grouped && !st.flat) {
+        for (const g of (st.sec.groups || [])) {
+          if ((g.rows || []).some(r => String(r[matchCol]) === String(value))) {
+            const ci = (st.collapsed || []).indexOf(g.key);
+            if (ci !== -1) { st.collapsed.splice(ci, 1); paint(targetSec); }
+            break;
+          }
+        }
+      }
+    }
+    switchTab(targetSec);
+    highlightRow(targetSec, matchCol, value);
+  }
+  function highlightRow(targetSec, matchCol, value) {
+    const body = bodyEl(targetSec); const st = secState[targetSec];
+    if (!body || !st) return;
+    const vis = st.order.filter(l => st.hidden.indexOf(l) === -1);
+    let idx = matchCol ? vis.indexOf(matchCol) : 0; if (idx < 0) idx = 0;
+    const tbl = body.querySelector('table'); if (!tbl) return;
+    for (const tr of tbl.querySelectorAll('tbody tr')) {
+      if (tr.classList.contains('grphdr')) continue;
+      const cell = tr.children[idx];
+      if (cell && (cell.getAttribute('title') === String(value) || cell.textContent.trim() === String(value))) {
+        if (tr.scrollIntoView) tr.scrollIntoView({ block: 'center' });
+        tr.classList.add('rowflash');
+        setTimeout(() => tr.classList.remove('rowflash'), 1600);
+        return true;
+      }
+    }
+    return false;
   }
 
   function esc(s) {
@@ -1143,6 +1205,7 @@ function getHtml(): string {
     const numCols = opts.numCols || {};
     const colBase = opts.colBase || {};
     const bars = opts.bars || {};
+    const links = opts.links || {};
     const sortCol = opts.sortCol;
     const rk = rowKeyOf(row, columns);
     let h = '<tr>';
@@ -1165,7 +1228,10 @@ function getHtml(): string {
       if (isChg) classes.push('changed');
       if (isSort) classes.push('sortcol');
       const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
-      let inner = cell(c, disp);
+      const lk = links[c];
+      let inner = (lk && raw !== '' && !isDash(raw))
+        ? '<a class="xref" data-sec="' + esc(lk.section) + '" data-match="' + esc(lk.match || '') + '" data-val="' + esc(raw) + '">' + esc(disp) + '</a>'
+        : cell(c, disp);
       if (isChg) {
         const ov = isDash(changed[ck]) ? '-' : changed[ck];
         inner += '<span class="old" title="previous value">' + esc(ov) + '</span>';
@@ -1216,7 +1282,7 @@ function getHtml(): string {
     const allRows = grouped ? st.sec.groups.reduce((a, g) => a.concat(g.rows), []) : st.sec.rows;
     const numCols = numericCols(cols, allRows);
     st.numCols = numCols;   // ▦ Columns menüsü per-kolon base düğmesi için kullanır
-    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {}, sortCol: st.sortCol };
+    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {}, links: st.sec.links || {}, sortCol: st.sortCol };
     const summary = '<div class="summary">' + esc(st.sec.summary) + '</div>';
     const bar = toolbarHtml(st);
     let table;
@@ -1321,6 +1387,9 @@ function getHtml(): string {
   }
 
   panesEl.addEventListener('click', e => {
+    // çapraz-referans linki: hedef nesneye git
+    const xref = e.target.closest('.xref');
+    if (xref) { e.preventDefault(); e.stopPropagation(); gotoXref(xref.dataset.sec, xref.dataset.match, xref.dataset.val); return; }
     const colsBtn = e.target.closest('.cols-btn');
     if (colsBtn) {
       e.stopPropagation();
