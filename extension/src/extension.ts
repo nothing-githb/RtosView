@@ -1109,8 +1109,6 @@ function getHtml(): string {
       return '<span class="badge ' + stateClass(val) + '">' + esc(val) + '</span>';
     if (lc.includes('discipline'))
       return '<span class="badge disc">' + esc(val) + '</span>';
-    if (lc === 'count' && asNum(val) === 0)
-      return '<span class="crit">' + esc(val) + '</span>';
     if (lc.includes('wait') && asNum(val) > 0)
       return '<span class="warn">' + esc(val) + '</span>';
     if (lc === 'id') return '<span class="idcol">' + esc(val) + '</span>';
@@ -1278,6 +1276,18 @@ function getHtml(): string {
     const lbl = used + ' / ' + mx + ' · ' + pct.toFixed(0) + '%';
     return '<div class="bar"><div class="barfill ' + cls + '" style="width:' + pct.toFixed(1) + '%"></div><span class="barlbl">' + esc(lbl) + '</span></div>';
   }
+  // link yalnız HEDEFTE eşleşen satır varsa bağlansın (0 / eşleşmeyen değer -> düz metin)
+  function linkHasTarget(lk, value) {
+    const st = secState[lk.section];
+    if (!st || !st.sec) return false;
+    const vis = st.order ? st.order.filter(l => st.hidden.indexOf(l) === -1) : [];
+    const mc = lk.match || vis[0];
+    if (!mc) return false;
+    const rows = st.sec.grouped
+      ? (st.sec.groups || []).reduce((a, g) => a.concat(g.rows || []), [])
+      : (st.sec.rows || []);
+    return rows.some(r => String(r[mc]) === String(value));
+  }
   function dataRow(columns, row, changed, opts) {
     opts = opts || {};
     const numCols = opts.numCols || {};
@@ -1307,7 +1317,7 @@ function getHtml(): string {
       if (isSort) classes.push('sortcol');
       const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
       const lk = links[c];
-      let inner = (lk && raw !== '' && !isDash(raw))
+      let inner = (lk && raw !== '' && !isDash(raw) && linkHasTarget(lk, raw))
         ? '<a class="xref" data-sec="' + esc(lk.section) + '" data-match="' + esc(lk.match || '') + '" data-val="' + esc(raw) + '">' + esc(disp) + '</a>'
         : cell(c, disp);
       if (isChg) {
@@ -1430,8 +1440,8 @@ function getHtml(): string {
       if (count > 0 && name !== activeName) tab.classList.add('haschg');
       else if (name === activeName) tab.classList.remove('haschg');
     }
-    paint(name);
-    buildColsMenu(name);
+    // paint() burada DEĞİL: önce tüm bölümlerin secState'i dolsun ki link eşleşme
+    // kontrolü (linkHasTarget) diğer bölümlerin verisini görebilsin (sıra bağımsız).
     return count;
   }
 
@@ -1855,7 +1865,8 @@ function getHtml(): string {
       for (const k of Object.keys(secState))
         if (list.findIndex(s => s.name === k) === -1) delete secState[k];
       let changed = 0;
-      for (const s of list) changed += (renderSection(s.name, s) || 0);
+      for (const s of list) changed += (renderSection(s.name, s) || 0);   // 1) tüm secState dolsun
+      for (const s of list) { paint(s.name); buildColsMenu(s.name); }       // 2) sonra çiz (link eşleşme kontrolü için)
       const chEl = document.getElementById('changes');
       if (changed > 0) { chEl.textContent = changed + ' changed'; chEl.classList.remove('hidden'); }
       else chEl.classList.add('hidden');

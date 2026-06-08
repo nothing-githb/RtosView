@@ -2,6 +2,14 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.30.1] - 2026-06-08
+
+### Changed
+- A **`link` field links only when a matching row exists** in the target section,
+  so `0` / "none" values (e.g. a free mutex's `Owner = 0`) stay plain text instead
+  of dead links.
+- Removed the automatic **red** styling of `Count = 0` cells.
+
 ## [0.30.0] - 2026-06-08
 
 ### Changed
