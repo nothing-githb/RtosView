@@ -2,6 +2,13 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.30.2] - 2026-06-08
+
+### Changed
+- Removed the automatic **amber** styling of `Waiting > 0` cells (matching the
+  earlier `Count = 0` change). Changed‑cell highlighting and state badges are
+  unaffected.
+
 ## [0.30.1] - 2026-06-08
 
 ### Changed

@@ -1109,8 +1109,6 @@ function getHtml(): string {
       return '<span class="badge ' + stateClass(val) + '">' + esc(val) + '</span>';
     if (lc.includes('discipline'))
       return '<span class="badge disc">' + esc(val) + '</span>';
-    if (lc.includes('wait') && asNum(val) > 0)
-      return '<span class="warn">' + esc(val) + '</span>';
     if (lc === 'id') return '<span class="idcol">' + esc(val) + '</span>';
     return esc(val);
   }
