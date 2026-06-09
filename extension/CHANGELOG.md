@@ -2,6 +2,15 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.32.1] - 2026-06-09
+
+### Fixed
+- **Batch parser:** a string field value **ending in a backslash** (e.g. a Windows
+  path `"C:\\"` or a regex) is now closed correctly, so the following fields are no
+  longer swallowed — batched values stay byte‑identical to per‑field reads. (The
+  only real feature‑parity regression from 0.32.0; found by an adversarial audit
+  and covered by a regression test.)
+
 ## [0.32.0] - 2026-06-08
 
 ### Changed (performance)

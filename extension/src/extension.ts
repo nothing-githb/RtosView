@@ -271,7 +271,13 @@ function splitTopLevel(s: string): string[] {
   const parts: string[] = []; let depth = 0, q = '', buf = '';
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
-    if (q) { buf += c; if (c === q && s[i - 1] !== '\\') q = ''; continue; }
+    if (q) {
+      buf += c;
+      // kapanış tırnağı: önündeki ardışık \ TEK ise escape'li (kapanmaz), ÇİFT/0 ise gerçekten kapanır
+      // ("C:\\" gibi ters-bölü ile biten string'ler doğru kapansın — trimCString ile aynı kaçış kuralı)
+      if (c === q) { let n = 0; for (let j = i - 1; j >= 0 && s[j] === '\\'; j--) n++; if (n % 2 === 0) q = ''; }
+      continue;
+    }
     if (c === '"' || c === "'") { q = c; buf += c; continue; }
     if (c === '{' || c === '[' || c === '(') { depth++; buf += c; continue; }
     if (c === '}' || c === ']' || c === ')') { depth--; buf += c; continue; }
