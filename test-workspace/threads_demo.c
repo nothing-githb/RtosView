@@ -101,34 +101,44 @@ typedef struct {
     kpool_t *pools[2];
 } kernel_t;
 
-/* ---- global'ler ---- */
-#define MAX_THREADS 8
-#define MAX_SEMS    8
-#define MAX_MUTEXES 8
+/* ---- global'ler (YÜZLERCE satır: ana tablolar döngülerle üretilir) ---- */
+#define N_PROC      8                  /* master process sayisi */
+#define TPP         32                 /* thread / process -> 256 thread */
+#define SPP         24                 /* sem / process    -> 192 sem */
+#define SLOT_BLK    32                 /* slot / process   -> 256 slot */
+#define MAX_THREADS (N_PROC * TPP)
+#define MAX_SEMS    (N_PROC * SPP)
+#define MAX_MUTEXES 200
+#define MAX_TIMERS  300
+#define MAX_WIDGETS 256
+#define MAX_PROCS   N_PROC
+#define MAX_SLOTS   (N_PROC * SLOT_BLK)
+
 tcb_t    g_threads[MAX_THREADS];
 int      g_thread_count = 0;
 ksem_t   g_sems[MAX_SEMS];
 int      g_sem_count = 0;
 kmutex_t g_mutexes[MAX_MUTEXES];
 int      g_mutex_count = 0;
-#define MAX_TIMERS  8
 ktimer_t g_timers[MAX_TIMERS];
 int      g_timer_count = 0;
-#define MAX_PROCS   4
 process_t g_procs[MAX_PROCS];
 int       g_proc_count = 0;
-process_t *g_process_list;   /* master listenin başı */
-#define MAX_WIDGETS 4
-widget_t    g_widget_pool[MAX_WIDGETS];   /* arka depo */
+process_t *g_process_list;                /* master listenin başı */
+widget_t    g_widget_pool[MAX_WIDGETS];   /* arka depo (cast dizisi) */
 dyn_array_t g_widgets;                    /* data = void*, widget_t[] gösterir */
 void       *g_slots[3];                   /* void* pointer dizisi -> her biri widget_t* (wrap örneği) */
 box_t       g_boxes[3];                    /* her goz {void *data; int kind}; data widget_t* (cast oncesi field hop) */
-#define MAX_SLOTS 6
-slot_t      g_slot_pool[MAX_SLOTS];        /* bazi gozler bos; index ile bagli */
-int         g_slot_head;                   /* zincirin ilk index'i */
-
+slot_t      g_slot_pool[MAX_SLOTS];        /* index ile bagli; process basina bir blok */
+int         g_slot_head;                   /* global zincirin ilk index'i */
 kpool_t  g_pool0;
 kernel_t g_kernel;
+
+/* libc yok -> isimler literal havuzundan döngüsel seçilir */
+static const char *NAMES[]  = { "main","worker","logger","net","disk","audio","video","sensor","timer","gc","ui","ipc" };
+#define NN  ((int)(sizeof(NAMES)/sizeof(NAMES[0])))
+static const char *PNAMES[] = { "init","worker","netd","diskd","audiod","videod","sensord","gcd","uid","ipcd","logd","kbd" };
+#define NPN ((int)(sizeof(PNAMES)/sizeof(PNAMES[0])))
 
 static tcb_t *mk_thread(int id, const char *name, thread_state_t st, int prio)
 {
@@ -185,87 +195,91 @@ static void inspect_point(int tick)
     g_sink = (unsigned)(tick + g_thread_count + g_sem_count + g_mutex_count + g_timer_count);
 }
 
+/* 0x4000=16384 stack'in kullanim yuzdesi (usage bar: yesil/yesil/sari/kirmizi) */
+static const unsigned long STACK_USED[4] = { 0x1000, 0x2a00, 0x3300, 0x3d00 }; /* 25/65/80/95% */
+
 int main(void)
 {
-    tcb_t *a = mk_thread(1, "main",     RUNNING, 0);
-    tcb_t *b = mk_thread(2, "worker-1", READY,   5);
-    tcb_t *c = mk_thread(3, "worker-2", BLOCKED, 5);
-    tcb_t *d = mk_thread(4, "logger",   WAITING, 9);
-    a->next = b; b->next = NULL;     /* init process'in thread'leri */
-    c->next = d; d->next = NULL;     /* worker process'in thread'leri */
-    /* stack kullanimi (toplam 0x4000=16384): usage bar icin yesil/sari/kirmizi */
-    a->stack_used = 0x1000;  /* 25%  yesil */
-    b->stack_used = 0x3d00;  /* 95%  kirmizi */
-    c->stack_used = 0x2a00;  /* 65%  yesil */
-    d->stack_used = 0x3300;  /* ~80% sari */
+    /* ---- process'ler + her birinin thread/sem alt listeleri (gruplu ağaç) ---- */
+    process_t *prevp = NULL;
+    for (int p = 0; p < N_PROC; p++) {
+        tcb_t *thead = NULL, *tprev = NULL;
+        for (int i = 0; i < TPP; i++) {
+            int gid = p * TPP + i;
+            tcb_t *t = mk_thread(gid + 1, NAMES[gid % NN], (thread_state_t)(gid % 4), gid % 10);
+            t->stack_used = STACK_USED[gid % 4];
+            if (!thead) thead = t;
+            if (tprev) tprev->next = t;
+            tprev = t;
+        }
+        ksem_t *shead = NULL, *sprev = NULL;
+        for (int i = 0; i < SPP; i++) {
+            int gid = p * SPP + i;
+            ksem_t *s = mk_sem(gid + 1, gid % 5, 5, gid % 3, (sem_discipline_t)(gid % 2));
+            if (!shead) shead = s;
+            if (sprev) sprev->next = s;
+            sprev = s;
+        }
+        process_t *proc = mk_proc(p + 1, PNAMES[p % NPN], thead, shead, NULL);
+        proc->slot_head = p * SLOT_BLK;            /* her process'in slot bloğu */
+        if (prevp) prevp->next = proc; else g_process_list = proc;
+        prevp = proc;
+    }
 
-    ksem_t *s0 = mk_sem(1, 0, 1, 2, FIFO);
-    ksem_t *s1 = mk_sem(2, 3, 5, 0, PRIORITY);
-    ksem_t *s2 = mk_sem(3, 1, 1, 0, FIFO);
-    s0->next = s1; s1->next = NULL;  /* init */
-    s2->next = NULL;                 /* worker */
+    /* ---- düz mutex tablosu (yüzlerce); kimi kilitli + owner geçerli bir thread id (link örneği) ---- */
+    for (int i = 0; i < MAX_MUTEXES; i++) {
+        int locked = (i % 3 == 0);
+        int owner  = locked ? ((i % MAX_THREADS) + 1) : 0;   /* threads'e link için geçerli id */
+        mk_mutex(i + 1, NAMES[i % NN], owner, locked, locked ? (i % 4) : 0);
+    }
 
-    kmutex_t *m0 = mk_mutex(1, "bus_lock", 1, 1, 1);
-    kmutex_t *m1 = mk_mutex(2, "log_lock", 0, 0, 0);
-    m0->next = NULL;                 /* init */
-    m1->next = NULL;                 /* worker */
+    /* ---- timer dizisi (yüzlerce) ---- */
+    for (int i = 0; i < MAX_TIMERS; i++)
+        mk_timer(i + 1, NAMES[i % NN], (i + 1) * 10, i % 7, i % 2);
 
-    mk_timer(1, "tick",     10,  3, 1);
-    mk_timer(2, "watchdog", 100, 50, 1);
-    mk_timer(3, "blink",    5,   0, 0);
-
-    /* dynamic array: void* buffer widget_t[] tutar; erişim için cast gerekir */
-    g_widget_pool[0].x = 10; g_widget_pool[0].y = 20; g_widget_pool[0].label = "button";
-    g_widget_pool[1].x = 30; g_widget_pool[1].y = 40; g_widget_pool[1].label = "slider";
-    g_widget_pool[2].x = 50; g_widget_pool[2].y = 60; g_widget_pool[2].label = "label";
+    /* ---- widget havuzu (yüzlerce, cast dizisi); ilk 3 anlamlı (slots/boxes wrap örnekleri) ---- */
+    for (int i = 0; i < MAX_WIDGETS; i++) {
+        g_widget_pool[i].x = 10 + i;
+        g_widget_pool[i].y = 20 + i * 2;
+        g_widget_pool[i].label = NAMES[i % NN];
+    }
+    g_widget_pool[0].label = "button";
+    g_widget_pool[1].label = "slider";
+    g_widget_pool[2].label = "label";
     g_widgets.data = g_widget_pool;
-    g_widgets.size = 3;
-    /* void* pointer dizisi: her eleman bir widget_t*; erişim için wrap ile cast gerekir */
+    g_widgets.size = MAX_WIDGETS;
     g_slots[0] = &g_widget_pool[0];
     g_slots[1] = &g_widget_pool[1];
     g_slots[2] = &g_widget_pool[2];
-
-    /* box: asil widget'a 'data' field'i uzerinden erisilir; wrap ile ((widget_t*)(elem.data)) */
     g_boxes[0].data = &g_widget_pool[0]; g_boxes[0].kind = 1;
     g_boxes[1].data = &g_widget_pool[1]; g_boxes[1].kind = 1;
     g_boxes[2].data = &g_widget_pool[2]; g_boxes[2].kind = 2;
 
-    /* index-linked havuz; iki ayri zincir (gozler index ile bagli) */
-    g_slot_pool[0].id = 101; g_slot_pool[0].name = "alpha"; g_slot_pool[0].next = 2;
-    g_slot_pool[2].id = 102; g_slot_pool[2].name = "beta";  g_slot_pool[2].next = 5;
-    g_slot_pool[5].id = 103; g_slot_pool[5].name = "gamma"; g_slot_pool[5].next = -1;
-    g_slot_head = 0;                 /* global zincir: 0 -> 2 -> 5 */
-    g_slot_pool[1].id = 201; g_slot_pool[1].name = "w-a";   g_slot_pool[1].next = 3;
-    g_slot_pool[3].id = 202; g_slot_pool[3].name = "w-b";   g_slot_pool[3].next = -1;
-    /* goz 4 bos kalir */
-    set_tag(g_slot_pool[0].tag, "alpha");    /* "alpha" + sondaki \000'lar */
-    set_tag(g_slot_pool[2].tag, "beta");
-    set_tag(g_slot_pool[5].tag, "gamma");
-    set_tag(g_slot_pool[1].tag, "longtag");  /* 7 char: tam dolu, trailing NUL yok */
-    set_tag(g_slot_pool[3].tag, "w-b");
-
-    /* master liste: 2 process, her biri kendi alt listeleriyle */
-    process_t *p0 = mk_proc(1, "init",   a, s0, m0);
-    process_t *p1 = mk_proc(2, "worker", c, s2, m1);
-    p0->slot_head = 0;   /* init  : 0 -> 2 -> 5  (alpha, beta, gamma) */
-    p1->slot_head = 1;   /* worker: 1 -> 3       (w-a, w-b) */
-    p0->next = p1; p1->next = NULL;
-    g_process_list = p0;
+    /* ---- index-linked havuz: process başına bir blok, her blok kendi içinde zincir (-1 ile biter) ---- */
+    for (int p = 0; p < N_PROC; p++) {
+        for (int i = 0; i < SLOT_BLK; i++) {
+            int idx = p * SLOT_BLK + i;
+            g_slot_pool[idx].id   = 100 + idx;
+            g_slot_pool[idx].name = NAMES[idx % NN];
+            set_tag(g_slot_pool[idx].tag, NAMES[idx % NN]);
+            g_slot_pool[idx].next = (i == SLOT_BLK - 1) ? -1 : (idx + 1);
+        }
+    }
+    g_slot_head = 0;   /* global 'pool' sekmesi blok 0'ı gösterir; procSlots her bloğu */
 
     /* eski pool kökü de geçerli kalsın */
-    g_pool0.thread_list = a;
-    g_pool0.sem_list    = s0;
-    g_pool0.mutex_list  = m0;
+    g_pool0.thread_list = g_process_list->thread_list;
+    g_pool0.sem_list    = g_process_list->sem_list;
+    g_pool0.mutex_list  = &g_mutexes[0];
     g_kernel.pools[0]   = &g_pool0;
     g_kernel.pools[1]   = NULL;
 
     for (int tick = 0; tick < 3; tick++) {
-        b->state   = (tick % 2) ? RUNNING : READY;
-        c->state   = (tick % 2) ? BLOCKED : WAITING;
-        m1->locked = (tick % 2);
-        m1->owner  = (tick % 2) ? 4 : 0;
-        g_timers[0].elapsed = tick;          /* array eleman alanı her tick değişir */
-        g_widget_pool[0].x  = 10 + tick;     /* void* array elemanı da değişir */
+        g_threads[1].state  = (tick % 2) ? RUNNING : READY;   /* değişiklik-vurgusu örneği */
+        g_mutexes[0].locked = (tick % 2);
+        g_mutexes[0].owner  = (tick % 2) ? 4 : 0;
+        g_timers[0].elapsed = tick;
+        g_widget_pool[0].x  = 10 + tick;
         inspect_point(tick);
     }
     return 0;
