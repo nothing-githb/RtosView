@@ -2,6 +2,24 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.41.0] - 2026-06-10
+
+### Fixed
+- **Editing a value in a grouped or linked-list section now writes the correct
+  field.** The edit l-value was built from the traversal cursor (a `$ri_*` / `$rg_*`
+  GDB convenience variable), which is NULL/stale after the walk — so editing e.g. a
+  semaphore's `count` changed nothing (it targeted the cursor). The l-value is now a
+  **stable element expression**: `root->next^i` for linked lists (with `${master}`
+  substitution for grouped sections), and `((cast)root)[i]` / `base[idx]` for arrays
+  and index lists (those were already correct).
+
+### Added (tests)
+- A GDB-driven **edit-write test** that verifies `set var <l-value>` actually
+  changes the field for **every mode** — array, array+cast, index_list, linked_list,
+  grouped-linked and grouped-index — plus sort-vs-edit row-identity checks. Wired
+  into a single pre-release suite (`run-all-tests.ps1`: tsc + webview + parser-vs-GDB
+  + edit) that is run before every version.
+
 ## [0.40.1] - 2026-06-10
 
 ### Added

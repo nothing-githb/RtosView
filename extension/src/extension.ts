@@ -417,7 +417,8 @@ function structMember(map: Record<string, string> | null, path: string): string 
 // parse eder (eşleşmezse alan-alan fallback). when/wrap/bar/${expr}/computed alanlar her zaman alan-alan.
 async function collectRowFields(
   session: vscode.DebugSession, fields: FieldCfg[], frameId: number | undefined,
-  rawElem: string, wrapElem: string, access: string
+  rawElem: string, wrapElem: string, access: string,
+  editRaw: string = rawElem, editWrap: string = wrapElem   // __edit__ l-value için KARARLI eleman (linked'de cursor değil root->next^i)
 ): Promise<Row> {
   const row: Row = {};
   let parsed: Record<string, string> | null = null;
@@ -437,7 +438,12 @@ async function collectRowFields(
     }
     if (val === undefined) val = cleanValue(await gdbExec(session, `print ${accExpr}`, frameId));   // fallback
     row[f.label] = val;
-    if (f.editable) row['__edit__' + f.label] = accExpr;
+    if (f.editable) {
+      // __edit__ KARARLI eleman üzerinden (geçici cursor değil) -> set var gerçek alanı değiştirir
+      let editExpr = resolveFieldExpr(f.expr, editRaw, editWrap, access);
+      if (f.wrap) editExpr = f.wrap.split('${expr}').join('(' + editExpr + ')');
+      row['__edit__' + f.label] = editExpr;
+    }
     if (f.bar) {
       const mx = barMaxExpr(f);
       if (mx) row['__bar__' + f.label] = /^\d+$/.test(mx) ? mx : cleanValue(await gdbExec(session, `print ${resolveFieldExpr(mx, rawElem, wrapElem, access)}`, frameId));
@@ -544,6 +550,8 @@ async function collectSection(
     log.debug(`linked_list "${name}": root=${cfg.root}, advance via cursor->${cfg.next}, access="->"`);
     let guard = 0;
     let reason = 'end';
+    const nx = cfg.next ?? 'next';
+    const needStable = cfg.fields.some(f => f.editable);   // edit l-value için kararlı zincir (root->next^i) sadece editable varsa kurulur
     // #2: cursor=root + ilk değer (null-check) TEK çağrıda; düğüm başına ayrı 'print cursor' turu yok
     let cur = cleanValue(await gdbExec(session, `print ${cursor} = ${cfg.root}`, frameId));
     while (true) {
@@ -551,7 +559,13 @@ async function collectSection(
       if (isNull(cur)) { reason = 'reached NULL'; break; }
       // node (cursor); field'a erişmeden ÖNCE wrap ile sarmalanır
       const elem = cfg.wrap ? '(' + cfg.wrap.split('${expr}').join('(' + cursor + ')') + ')' : cursor; // (wrap)->field
-      rows.push(await collectRowFields(session, cfg.fields, frameId, cursor, elem, '->'));
+      // KARARLI eleman (cursor'a bağlı değil): root(->next)^index — edit sonrası set var doğru alana yazsın
+      let sRaw = cursor, sElem = elem;
+      if (needStable) {
+        sRaw = cfg.root; for (let k = 0; k < rows.length; k++) sRaw = sRaw + '->' + nx;
+        sElem = cfg.wrap ? '(' + cfg.wrap.split('${expr}').join('(' + sRaw + ')') + ')' : sRaw;
+      }
+      rows.push(await collectRowFields(session, cfg.fields, frameId, cursor, elem, '->', sRaw, sElem));
       log.trace(`linked_list "${name}" node ${guard - 1}: cursor=${cur} → advance via ${cursor}->${cfg.next}`);
       // #2: advance + sonraki değeri (null-check) TEK çağrıda — eski 'set' + ayrı 'print cursor' yerine
       cur = cleanValue(await gdbExec(session, `print ${cursor} = ${cursor}->${cfg.next}`, frameId));
