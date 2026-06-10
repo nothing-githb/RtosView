@@ -2,6 +2,15 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.43.0] - 2026-06-10
+
+### Changed
+- **Clearer “cannot access” indicator.** A value GDB can't read (`No symbol …`,
+  `cannot access memory`, `optimized out`, or an evaluation error) now renders as a
+  distinct red **⚠** with the cleaned GDB error in its tooltip — visually separate
+  from a **NULL** pointer (`0x0`), which stays a plain muted `-`. (Previously both
+  looked the same.) Errors are still logged to the Output channel.
+
 ## [0.42.2] - 2026-06-10
 
 ### Fixed

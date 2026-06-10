@@ -1101,6 +1101,7 @@ function getHtml(): string {
   td.mono { font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; opacity: 0.95; }
   td.idcol { font-weight: 700; opacity: 0.9; }
   .dash { opacity: 0.4; }
+  .dash.err { opacity: 0.9; color: var(--vscode-errorForeground, #e74c3c); cursor: help; }
   .grp-bar { margin: 10px 2px 6px; }
   .grp-toggle { font-size: 11px; }
   tr.grphdr td {
@@ -1382,7 +1383,12 @@ function getHtml(): string {
 
   // Stiller artık bölüm türüne değil, KOLON ADINA göre uygulanır (generic)
   function cell(col, val) {
-    if (isDash(val)) return '<span class="dash" title="' + esc(val) + '">-</span>';
+    // erişilemeyen/HATA -> kırmızı ⚠ (tooltip'te temiz mesaj); NULL/0x0 -> sade '-' (ayrı görünür)
+    if (isUnreadable(val)) {
+      const msg = String(val).replace(/^<<error:\\s*/, '').replace(/>>$/, '').trim() || 'unreadable';
+      return '<span class="dash err" title="' + esc(msg) + '">⚠</span>';
+    }
+    if (isNullPtr(val)) return '<span class="dash" title="' + esc(val) + '">-</span>';
     const lc = String(col).toLowerCase();
     if (lc.includes('state') || lc.includes('durum'))
       return '<span class="badge ' + stateClass(val) + '">' + esc(val) + '</span>';

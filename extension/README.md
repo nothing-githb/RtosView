@@ -315,7 +315,7 @@ Any `fields` entry can carry extra options beyond `label`/`expr`. One example ea
 
 ### Notes on `expr` and rendering
 
-You never declare types or sizes. Whatever `expr` evaluates to is formatted by GDB according to its type: enums render as names (`RUNNING`, `FIFO`), pointers as addresses, integers as numbers. A fixed-size `char` array is shown only up to the first `\0` — the trailing NULs GDB prints (`"abc\000\000"` or `"abc", '\000' <repeats N times>`) are dropped, so you just see `"abc"`. A value GDB cannot read (an inaccessible address, an error such as `optimized out`) or a NULL pointer (`0x0`) is shown as a muted `-`; a plain integer `0` is shown as `0`.
+You never declare types or sizes. Whatever `expr` evaluates to is formatted by GDB according to its type: enums render as names (`RUNNING`, `FIFO`), pointers as addresses, integers as numbers. A fixed-size `char` array is shown only up to the first `\0` — the trailing NULs GDB prints (`"abc\000\000"` or `"abc", '\000' <repeats N times>`) are dropped, so you just see `"abc"`. A value GDB **cannot read** — `No symbol …`, `cannot access memory`, `optimized out`, or an evaluation error — is shown as a distinct red **⚠** with the GDB error in its tooltip (and logged to the Output channel). A **NULL pointer** (`0x0`) is shown as a muted `-` (visually separate from an error), and a plain integer `0` is shown as `0`.
 
 ## Settings
 
