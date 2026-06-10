@@ -2,6 +2,17 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.40.0] - 2026-06-10
+
+### Changed (performance)
+- **Config saves only re-fetch when the data is actually affected.** Saving the
+  config file no longer always re-reads everything from GDB. The extension compares
+  a **data fingerprint** (mode/root/next/head/nil/count/access/cast/wrap/groupBy/
+  max/label + each field's expr/wrap/when/bar.max/editable/hidden + tab order &
+  visibility). If only **presentation** changed — a column's `base`, a `bar`'s
+  `warn`/`crit`, a `link`, or `badge` colors — it's applied **client-side with zero
+  GDB round-trips**; otherwise a normal (prioritized) refresh runs.
+
 ## [0.39.0] - 2026-06-10
 
 ### Changed

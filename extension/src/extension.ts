@@ -166,12 +166,33 @@ function setupConfigWatcher(context: vscode.ExtensionContext) {
     pattern = new vscode.RelativePattern(folder, rel);
   }
   configWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-  const onChange = () => {
-    if (panel && lastStopped) doRefresh();   // çok sayıda kayıt -> debounce ile tek (en son) refresh
-  };
-  configWatcher.onDidChange(onChange);
-  configWatcher.onDidCreate(onChange);
+  configWatcher.onDidChange(onConfigChange);
+  configWatcher.onDidCreate(onConfigChange);
   context.subscriptions.push(configWatcher);
+}
+
+// Config kaydedildiğinde: VERİYİ etkileyen bir şey değiştiyse yeniden çek; yalnız SUNUM (base/bar eşiği/link/badge)
+// değiştiyse GDB'ye hiç gitme — istemci-tarafı yeniden çiz. "Her zaman her şeyi çekme" optimizasyonu.
+function onConfigChange() {
+  if (!panel || !lastStopped) return;
+  const cfg = loadConfig();
+  if (!cfg) { doRefresh(); return; }   // okunamadı/şema bozuk -> güvenli tam yenile
+  const secs = extractSections(cfg);
+  const fp = fingerprintOf(secs, resolveLayout(secs));
+  if (fp !== lastFingerprint) {
+    log?.info('config change: data-affecting → refetch');
+    doRefresh();   // veri/sıra/gizli/alan değişti -> normal (öncelikli streaming) yenile (lastFingerprint'i günceller)
+    return;
+  }
+  // yalnız sunum değişmiş: GDB yok, her bölümün base/bar/link/badge'ini istemciye gönder
+  log?.info('config change: presentation-only → no GDB refetch');
+  for (const { name, cfg: scfg } of secs) {
+    panel.webview.postMessage({
+      type: 'presentationUpdate', section: name,
+      bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields),
+      links: fieldLinks(scfg.fields), badges: fieldBadges(scfg.fields)
+    });
+  }
 }
 
 // --- debounce + iptal: hızlı arka arkaya istekler (config kaydı, hızlı adımlama)
@@ -746,6 +767,33 @@ async function buildGrouped(
 // ---------------------------------------------------------------------------
 // Yenileme
 // ---------------------------------------------------------------------------
+// Bir bölümün VERİYİ etkileyen imzası (GDB'den ne çekildiğini belirleyen alanlar).
+// HARİÇ (yalnız sunum, GDB gerektirmez): base, bar.warn/crit, link, badge.
+function dataSig(cfg: SectionCfg): string {
+  const barMax = (b: any) => (b == null ? null : (typeof b === 'object' ? b.max : b));
+  return JSON.stringify({
+    mode: cfg.mode, root: cfg.root, next: cfg.next, head: cfg.head, nil: cfg.nil,
+    count: cfg.count, access: cfg.access, cast: cfg.cast, wrap: cfg.wrap,
+    groupBy: cfg.groupBy, max: cfg.max, label: cfg.label,
+    fields: (cfg.fields || []).map(f => ({ l: f.label, e: f.expr, w: f.wrap, wn: f.when, bm: barMax(f.bar), ed: !!f.editable, h: !!f.hidden }))
+  });
+}
+// sekme sırası + etkin gizli küme (refresh ile aynı kurallar)
+function resolveLayout(secs: { name: string; cfg: SectionCfg }[]) {
+  const allNames = secs.map(s => s.name);
+  const order = (sectionPrefs.order || []).filter(n => allNames.includes(n));
+  for (const n of allNames) if (!order.includes(n)) order.push(n);
+  const configHidden = secs.filter(s => s.cfg.hidden).map(s => s.name);
+  const hiddenNames = sectionPrefs.touched ? (sectionPrefs.hidden || []) : configHidden;
+  const hiddenSet = new Set(hiddenNames.filter(n => allNames.includes(n)));
+  return { order, hiddenSet, visible: order.filter(n => !hiddenSet.has(n)) };
+}
+// VERİ parmak izi: sıra + gizli küme + her bölümün dataSig'i. Değişmezse config'te yalnız sunum değişmiş demektir.
+function fingerprintOf(secs: { name: string; cfg: SectionCfg }[], lay: { order: string[]; hiddenSet: Set<string> }): string {
+  return JSON.stringify({ o: lay.order, h: [...lay.hiddenSet].sort(), s: secs.map(x => [x.name, dataSig(x.cfg)]) });
+}
+let lastFingerprint = '';
+
 async function refresh(session: vscode.DebugSession, threadId: number, gen?: number) {
   if (!panel) return;
   const stale = () => gen !== undefined && gen !== refreshGen;   // daha yeni istek geldiyse bu refresh iptal
@@ -773,15 +821,9 @@ async function refresh(session: vscode.DebugSession, threadId: number, gen?: num
   const secs = extractSections(cfg);
   const byName: Record<string, { name: string; cfg: SectionCfg; i: number }> = {};
   secs.forEach((s, i) => { byName[s.name] = { name: s.name, cfg: s.cfg, i }; });
-  const allNames = secs.map(s => s.name);
-  // sekme sırası (sectionPrefs.order) + yeni eklenenler sona
-  const order = (sectionPrefs.order || []).filter(n => allNames.includes(n));
-  for (const n of allNames) if (!order.includes(n)) order.push(n);
-  // gizli sekmeler: kullanıcı Sections menüsünde seçim yaptıysa (touched) onun listesi; yoksa config "hidden":true
-  const configHidden = secs.filter(s => s.cfg.hidden).map(s => s.name);
-  const hiddenNames = sectionPrefs.touched ? (sectionPrefs.hidden || []) : configHidden;
-  const hiddenSet = new Set(hiddenNames.filter(n => allNames.includes(n)));
-  const visible = order.filter(n => !hiddenSet.has(n));
+  const lay = resolveLayout(secs);
+  const order = lay.order, hiddenSet = lay.hiddenSet, visible = lay.visible;
+  lastFingerprint = fingerprintOf(secs, lay);   // sonraki config değişimini "veri mi sunum mu" diye karşılaştırmak için taban
   const ts = new Date().toLocaleTimeString();
   log?.info(`refresh: ${secs.length} section(s); visible=[${visible.join(', ')}] active=${activeTab ?? '-'}`);
 
@@ -2137,6 +2179,16 @@ function getHtml(): string {
       // tek bölüm: durak akışındaki bir bölüm VEYA hedefli reveal -> bu sekme dolar/çizilir
       if (m.sec) { renderSection(m.section, m.sec); paint(m.section); buildColsMenu(m.section); recomputeChanged(); }
       if (m.ts) tsEl.textContent = 'updated ' + m.ts;
+    } else if (m.type === 'presentationUpdate') {
+      // config'te yalnız sunum değişti (base/bar eşiği/link/badge) -> GDB'siz: mevcut satırları koru, yeniden çiz
+      const st = secState[m.section];
+      if (st && st.sec) {
+        if (m.bars) st.sec.bars = m.bars;
+        if (m.links) st.sec.links = m.links;
+        if (m.badges) st.sec.badges = m.badges;
+        if (m.bases) { st.sec.bases = m.bases; st.colBase = st.colBase || {}; for (const k in m.bases) st.colBase[k] = m.bases[k]; }
+        paint(m.section); buildColsMenu(m.section);
+      }
     } else if (m.type === 'patchRow') {
       // edit value sonrası tek satır güncelleme: yeni alanları o satıra yaz, bölümü (istemci-tarafı) yeniden boya
       const st = secState[m.section];
