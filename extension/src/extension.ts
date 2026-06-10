@@ -935,17 +935,17 @@ function openPanel(context: vscode.ExtensionContext) {
           value: cur
         });
         if (val === undefined || val === '') return;   // iptal
-        let frameId: number | undefined;
-        try {
-          const stk = await lastStopped.session.customRequest('stackTrace', { threadId: lastStopped.threadId, startFrame: 0, levels: 1 });
-          frameId = stk?.stackFrames?.[0]?.id;
-        } catch { /* global ifadeler için frame gerekmez */ }
+        const frameId = lastStopped.frameId;   // durakta cache'li; ekstra stackTrace turu yok
         const res = (await gdbExec(lastStopped.session, `set var ${msg.expr} = ${val}`, frameId)).toString().replace(/\s+/g, ' ').trim();
         log?.info(`edit: set var ${msg.expr} = ${val}  ⇒  ${res || 'ok'}`);
-        if (/no symbol|cannot|lvalue|error|invalid|<<error/i.test(res)) {
+        const errored = /no symbol|cannot|lvalue|error|invalid|<<error/i.test(res);
+        if (errored) {
           vscode.window.showErrorMessage(`Debug Inspector: edit failed — ${res}`);
+        } else if (msg.section && typeof msg.rowIndex === 'number' && typeof msg.label === 'string') {
+          // ANINDA geri-bildirim: girilen değeri hücreye hemen yaz (re-fetch arka planda doğrular + bağımlı hücreleri yeniler)
+          panel?.webview.postMessage({ type: 'patchRow', section: msg.section, rowIndex: msg.rowIndex, row: { [msg.label]: String(val) } });
         }
-        // SADECE düzenlenen satırı güncelle (tüm paneli değil); bilinmiyorsa eski davranışa düş
+        // SADECE düzenlenen satırı yeniden çek (tüm paneli değil); bilinmiyorsa eski davranışa düş
         if (typeof msg.section === 'string' && msg.section) refreshRow(msg.section, typeof msg.rowIndex === 'number' ? msg.rowIndex : null);
         else doRefresh();
       } else if (msg?.type === 'export' && typeof msg.json === 'string') {
@@ -1596,7 +1596,7 @@ function getHtml(): string {
         inner += '<span class="old" title="previous value">' + esc(ov) + '</span>';
       }
       const ed = row['__edit__' + c];
-      const editAttr = (ed != null) ? ' data-edit="' + esc(ed) + '"' : '';
+      const editAttr = (ed != null) ? ' data-edit="' + esc(ed) + '" data-col="' + esc(c) + '"' : '';
       h += '<td' + clsAttr + editAttr + ' title="' + esc(raw) + '">' + inner + '</td>';
     }
     return h + '</tr>';
@@ -1615,15 +1615,19 @@ function getHtml(): string {
   function buildGroupedTable(columns, groups, collapsed, sortCol, sortDir, opts) {
     if (!groups || !groups.length) return '<div class="empty">No groups (master section is empty).</div>';
     let h = '<table><thead><tr>' + headerCells(columns, sortCol, sortDir, opts && opts.numCols, opts && opts.colBase, opts && opts.bars) + '</tr></thead><tbody>';
+    let base = 0;   // flat kaynak index ofseti (patchRow gruplar arası düzleştirmeyle aynı sıra)
     for (const g of groups) {
       const isCol = collapsed.indexOf(g.key) !== -1;
       h += '<tr class="grphdr" data-grp="' + esc(g.key) + '"><td colspan="' + columns.length + '">' +
         '<span class="caret">' + (isCol ? '▸' : '▾') + '</span> ' + esc(g.label) +
         ' <span class="grpcnt">' + g.rows.length + '</span></td></tr>';
       if (!isCol) {
-        const data = sortRows(g.rows, columns, sortCol, sortDir);
-        for (const row of data) h += dataRow(columns, row, null, opts);
+        let gi = g.rows.map((_, j) => j);
+        if (sortCol && columns.indexOf(sortCol) !== -1)
+          gi = gi.slice().sort((a, b) => { const c = compareVals(g.rows[a][sortCol] ?? '', g.rows[b][sortCol] ?? ''); return sortDir === 'desc' ? -c : c; });
+        for (const j of gi) h += dataRow(columns, g.rows[j], null, opts, base + j);   // data-ri = flat kaynak index
       }
+      base += g.rows.length;   // çökük gruplarda da say -> patchRow düzleştirmesiyle tutarlı
     }
     return h + '</tbody></table>';
   }
@@ -1769,7 +1773,7 @@ function getHtml(): string {
     const ce = e.target.closest('.cell-edit');
     if (ce) {
       const riAttr = ce.dataset.ri;
-      vscodeApi.postMessage({ type: 'editValue', expr: ce.dataset.edit, current: ce.dataset.cur || '', section: ce.dataset.section || null, rowIndex: (riAttr != null && riAttr !== '') ? +riAttr : null });
+      vscodeApi.postMessage({ type: 'editValue', expr: ce.dataset.edit, current: ce.dataset.cur || '', section: ce.dataset.section || null, rowIndex: (riAttr != null && riAttr !== '') ? +riAttr : null, label: ce.dataset.col || null });
       for (const mm of document.querySelectorAll('.cols-menu')) mm.classList.add('hidden'); e.stopPropagation(); return;
     }
     const colsBtn = e.target.closest('.cols-btn');
@@ -1980,7 +1984,7 @@ function getHtml(): string {
       if (td.dataset.edit) {
         const tr = td.closest('tr');
         const ri = (tr && tr.dataset.ri != null) ? tr.dataset.ri : '';
-        h += '<div class="cm-item cell-edit" data-edit="' + esc(td.dataset.edit) + '" data-cur="' + esc(td.getAttribute('title') || '') + '" data-section="' + esc(name) + '" data-ri="' + esc(ri) + '">Edit value…</div>';
+        h += '<div class="cm-item cell-edit" data-edit="' + esc(td.dataset.edit) + '" data-cur="' + esc(td.getAttribute('title') || '') + '" data-section="' + esc(name) + '" data-ri="' + esc(ri) + '" data-col="' + esc(td.dataset.col || '') + '">Edit value…</div>';
       }
       popMenu(name, e, h);
     }
@@ -2222,11 +2226,11 @@ function getHtml(): string {
         paint(m.section); buildColsMenu(m.section);
       }
     } else if (m.type === 'patchRow') {
-      // edit value sonrası tek satır güncelleme: yeni alanları o satıra yaz, bölümü (istemci-tarafı) yeniden boya
+      // edit value: yeni alan(lar)ı o satıra yaz, bölümü (istemci-tarafı) yeniden boya. grouped'da flat index ile düzleştir.
       const st = secState[m.section];
-      if (st && st.sec && !st.sec.grouped && Array.isArray(st.sec.rows) && m.row && typeof m.rowIndex === 'number' && st.sec.rows[m.rowIndex]) {
-        Object.assign(st.sec.rows[m.rowIndex], m.row);
-        paint(m.section);
+      if (st && st.sec && m.row && typeof m.rowIndex === 'number') {
+        const tr = st.sec.grouped ? (st.sec.groups || []).reduce((a, g) => a.concat(g.rows || []), []) : (st.sec.rows || []);
+        if (tr[m.rowIndex]) { Object.assign(tr[m.rowIndex], m.row); paint(m.section); }
       }
     } else if (m.type === 'patchColumn') {
       // tek kolon hedefli güncelleme (column show): yeni field'ı mevcut satırlara merge et

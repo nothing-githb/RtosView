@@ -2,6 +2,17 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.41.1] - 2026-06-10
+
+### Changed
+- **Edit value applies instantly.** After you confirm an edit, the cell updates
+  immediately with the entered value (optimistic), while the row re-reads in the
+  background to recompute any dependent (`when`/`bar`/computed) cells. Removed a
+  redundant `stackTrace` round-trip per edit (the stop's frame is already cached).
+  Grouped sections now also tag rows with a flat source index, so instant updates
+  work there too. (The input box is intentional — editing writes to the running
+  program.)
+
 ## [0.41.0] - 2026-06-10
 
 ### Fixed
