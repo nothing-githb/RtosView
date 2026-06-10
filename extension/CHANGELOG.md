@@ -2,6 +2,15 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.37.0] - 2026-06-10
+
+### Changed (performance)
+- **Targeted lazy fetch.** Showing a hidden column now re-reads **only that field**
+  (merged into the existing rows by position); revealing a hidden section fetches
+  **only that section** — instead of refreshing the whole panel. Grouped sections
+  rebuild just their master plus the affected group. If a column patch can't be
+  aligned to the current rows, it safely falls back to a full refresh.
+
 ## [0.36.1] - 2026-06-09
 
 ### Fixed

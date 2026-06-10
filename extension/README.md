@@ -22,7 +22,7 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
 - **Refresh on demand or on change.** A **Refresh** button re-reads the config without restarting the debugger, and the panel also refreshes automatically when the config file changes on disk (while stopped).
 - **Pause / Resume.** Stop auto-refreshing and querying GDB on each stop when you don't need it; Refresh still does a one-shot. Remembered per workspace.
 - **Change highlighting.** Cells that changed since the previous stop are amber-highlighted, with the previous value shown faded and struck-through next to the new one. A `N changed` badge shows the total; tabs that changed in the background flag their count.
-- **Pick & reorder columns.** Drag a column header (or a row in the **▦ Columns** menu) to reorder — a bold blue insertion line marks the drop target and a drag-preview chip follows the cursor. Right-click a header or use the menu to show/hide. Order and visibility persist per workspace. Hidden columns are **not** read from GDB at all; enabling one fetches its data on the spot.
+- **Pick & reorder columns.** Drag a column header (or a row in the **▦ Columns** menu) to reorder — a bold blue insertion line marks the drop target and a drag-preview chip follows the cursor. Right-click a header or use the menu to show/hide. Order and visibility persist per workspace. Hidden columns are **not** read from GDB at all; enabling one fetches **only that column** on the spot (merged into the existing rows — the rest of the panel isn't re-read).
 - **Grouping (tree).** Relate sections: render one section, in its own tab, as a
   collapsible tree grouped under a master section (`groupBy` + `${master}`) — e.g.
   every process's semaphores under its process node — all at once, with a
@@ -38,7 +38,8 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
   (and unfetched) until you enable it from the ▦ Columns menu.
 - **Manage sections (tabs).** Hide/show whole sections from the **▤ Sections** menu
   and reorder by **dragging a tab** (or a row in the menu) — instant (client-side),
-  remembered per workspace. A section can also start hidden with `"hidden": true`
+  remembered per workspace. Revealing a hidden section fetches **only that section**
+  (not the whole panel). A section can also start hidden with `"hidden": true`
   in config.
 - **Readable UI.** Recognized columns get automatic styling: a `State` column becomes a colored badge (RUNNING / READY / BLOCKED / WAITING — or your own value→color map via a field's `"badge"`), plus a summary line per tab. Changed cells light up amber.
 - **Read-only by default (optional editing).** Debug Inspector only *reads* your data — it never calls functions. A field can opt into editing with `"editable": true`; then right-click → **Edit value…** writes it with GDB `set var`. Right-click any cell also offers **Copy cell**.

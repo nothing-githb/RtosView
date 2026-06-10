@@ -206,6 +206,53 @@ async function runRefresh() {
   }
 }
 
+// Hedefli yenileme: tek bölüm (section reveal) veya tek kolon (column show) — tüm paneli yeniden çekmeden.
+// label verilirse SADECE o field çekilir ve mevcut satırlara merge edilir; verilmezse tüm bölüm (aktif kolonlarıyla) kurulur.
+async function refreshTarget(section: string, label?: string) {
+  if (!panel || !lastStopped) return;   // durmuş değilse veri yok; sonraki durakta dolar
+  const session = lastStopped.session;
+  const frameId = lastStopped.frameId;
+  const cfg = loadConfig(); if (!cfg) return;
+  const secs = extractSections(cfg);
+  const idx = secs.findIndex(s => s.name === section);
+  if (idx < 0) return;
+  const scfg = secs[idx].cfg;
+
+  // grouped bölüm için master'ı kur (sadece bu bölüm + master fetch edilir, diğer bölümlere dokunulmaz)
+  let masters: Record<string, { sec: Section; selExprs: string[]; cfg: SectionCfg }> = {};
+  if (isGrouped(scfg)) {
+    const mName = scfg.groupBy as string;
+    const mIdx = secs.findIndex(s => s.name === mName);
+    if (mIdx < 0) return;
+    const mSec = await buildSection(session, secs[mIdx].cfg, frameId, '$ri_' + mIdx, mName);
+    masters[mName] = { sec: mSec, selExprs: mSec.rows.map((_, k) => selectorExpr(secs[mIdx].cfg, k)), cfg: secs[mIdx].cfg };
+  }
+  const ts = new Date().toLocaleTimeString();
+
+  if (label) {
+    // TEK KOLON: yalnız bu field'ı çek -> satır sırasıyla merge için gönder
+    const oneField = scfg.fields.find(f => f.label === label);
+    if (!oneField) return;
+    const subCfg: SectionCfg = { ...scfg, fields: [oneField] };
+    let rows: Row[];
+    if (isGrouped(scfg)) {
+      const g = await buildGrouped(session, frameId, idx, section, subCfg, masters);
+      rows = (g.groups || []).reduce<Row[]>((a, gr) => a.concat(gr.rows), []);
+    } else {
+      rows = await collectSection(session, subCfg, frameId, '$ri_' + idx, section);
+    }
+    log?.debug(`refreshTarget: column "${section}.${label}" -> ${rows.length} value(s)`);
+    panel.webview.postMessage({ type: 'patchColumn', section, label, rows, ts });
+  } else {
+    // TEK BÖLÜM: tüm aktif kolonlarıyla yeniden kur
+    const sec = isGrouped(scfg)
+      ? await buildGrouped(session, frameId, idx, section, scfg, masters)
+      : await buildSection(session, scfg, frameId, '$ri_' + idx, section);
+    log?.debug(`refreshTarget: section "${section}" rebuilt`);
+    panel.webview.postMessage({ type: 'patchSection', section, sec, ts });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // GDB ile konuşma
 // ---------------------------------------------------------------------------
@@ -757,8 +804,11 @@ function openPanel(context: vscode.ExtensionContext) {
           hidden: Array.isArray(msg.hidden) ? msg.hidden : []
         };
         extContext?.workspaceState.update(COLPREF_KEY, columnPrefs);
-        // yeni bir sütun aktifleştirildiyse verisini çekmek için yenile (durmuşsa)
-        if (msg.refetch) doRefresh();
+        // yeni bir sütun aktifleştirildiyse SADECE o field'ı çek (bilinmiyorsa o bölümü), tüm paneli değil
+        if (msg.refetch) {
+          if (typeof msg.shown === 'string' && msg.shown) refreshTarget(msg.section, msg.shown);
+          else refreshTarget(msg.section);
+        }
       } else if (msg?.type === 'setPaused') {
         paused = !!msg.paused;
         log?.info(`webview: ${paused ? 'paused' : 'resumed'}`);
@@ -775,8 +825,8 @@ function openPanel(context: vscode.ExtensionContext) {
         };
         log?.debug(`webview: setSections order=[${sectionPrefs.order.join(', ')}] hidden=[${sectionPrefs.hidden.join(', ')}] reveal=${msg.reveal || '-'}`);
         extContext?.workspaceState.update(SECPREF_KEY, sectionPrefs);
-        // reorder/hide tamamen istemci-tarafı (GDB yok); SADECE gizli bir bölüm gösterilince yeniden çek
-        if (msg.reveal) doRefresh();
+        // reorder/hide tamamen istemci-tarafı (GDB yok); SADECE gösterilen bölümü çek (tüm paneli değil)
+        if (msg.reveal) refreshTarget(msg.reveal);
       } else if (msg?.type === 'editValue' && typeof msg.expr === 'string' && msg.expr) {
         // sağ-tık 'Edit value' -> GDB 'set var' ile debuggee'ye YAZ (yalnız editable alanlar)
         if (!lastStopped) { vscode.window.showWarningMessage('Debug Inspector: debugger not stopped — cannot edit.'); return; }
@@ -1503,13 +1553,14 @@ function getHtml(): string {
     menu.innerHTML = h;
   }
 
-  function afterColChange(name, refetch) {
+  function afterColChange(name, refetch, shownLabel) {
     const st = secState[name];
     paint(name);
     buildColsMenu(name);
     vscodeApi.postMessage({
       type: 'setColumns', section: name,
-      order: st.order.slice(), hidden: st.hidden.slice(), refetch: !!refetch
+      order: st.order.slice(), hidden: st.hidden.slice(), refetch: !!refetch,
+      shown: shownLabel || null
     });
   }
 
@@ -1672,7 +1723,7 @@ function getHtml(): string {
     const hi = st.hidden.indexOf(label);
     if (cb.checked) {
       if (hi !== -1) st.hidden.splice(hi, 1);
-      afterColChange(name, true);
+      afterColChange(name, true, label);   // sadece bu kolonun verisi çekilsin
     } else {
       const visible = st.order.filter(l => st.hidden.indexOf(l) === -1).length;
       if (visible <= 1) { cb.checked = true; return; }
@@ -1993,6 +2044,29 @@ function getHtml(): string {
       else chEl.classList.add('hidden');
     } else if (m.type === 'running') {
       if (!paused) { statusEl.textContent = 'running…'; statusEl.className = 'pill run'; }
+    } else if (m.type === 'patchSection') {
+      // tek bölüm hedefli güncelleme (section reveal): sadece bu sekme dolar/çizilir
+      if (m.sec) { renderSection(m.section, m.sec); paint(m.section); buildColsMenu(m.section); }
+      if (m.ts) tsEl.textContent = 'updated ' + m.ts;
+    } else if (m.type === 'patchColumn') {
+      // tek kolon hedefli güncelleme (column show): yeni field'ı mevcut satırlara merge et
+      const st = secState[m.section];
+      if (st && st.sec) {
+        const tr = st.sec.grouped ? (st.sec.groups || []).reduce((a, g) => a.concat(g.rows || []), []) : (st.sec.rows || []);
+        const pr = Array.isArray(m.rows) ? m.rows : [];
+        if (tr.length !== pr.length) {
+          vscodeApi.postMessage({ type: 'refresh' });   // hizalama bozuk -> güvenli tam yenile
+        } else {
+          for (let k = 0; k < tr.length; k++) {
+            const src = pr[k]; if (!src) continue;
+            tr[k][m.label] = src[m.label];
+            if (src['__bar__' + m.label] !== undefined) tr[k]['__bar__' + m.label] = src['__bar__' + m.label];
+            if (src['__edit__' + m.label] !== undefined) tr[k]['__edit__' + m.label] = src['__edit__' + m.label];
+          }
+          paint(m.section); buildColsMenu(m.section);
+          if (m.ts) tsEl.textContent = 'updated ' + m.ts;
+        }
+      }
     }
   });
 </script>
