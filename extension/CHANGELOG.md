@@ -2,6 +2,14 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.38.1] - 2026-06-10
+
+### Added
+- **“Loading…” placeholder.** While the prioritized streaming refresh is still
+  fetching, sections whose data hasn't arrived yet — and newly revealed sections —
+  show a pulsing **“Loading…”** placeholder (with a `…` tab count) instead of an
+  empty pane, so it's clear they're queued rather than empty.
+
 ## [0.38.0] - 2026-06-10
 
 ### Changed (performance)

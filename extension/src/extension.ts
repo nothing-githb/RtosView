@@ -1063,6 +1063,8 @@ function getHtml(): string {
   .crit { color: #e74c3c; font-weight: 700; }
 
   .empty { opacity: 0.55; padding: 28px 4px; font-size: 13px; }
+  .empty.loading { font-style: italic; animation: di-pulse 1.2s ease-in-out infinite; }
+  @keyframes di-pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 0.7; } }
 
   .pill.chg { background: rgba(241,196,15,0.20); color: #f1c40f; }
   td.changed {
@@ -1526,6 +1528,14 @@ function getHtml(): string {
     return st.order.filter(l => st.hidden.indexOf(l) === -1);
   }
 
+  // henüz verisi gelmemiş (streaming sırasında sırada bekleyen / yeni gösterilen) bölüm için yer tutucu
+  function paintLoading(name) {
+    const body = bodyEl(name);
+    if (body) body.innerHTML = '<div class="empty loading">Loading…</div>';
+    const cnt = cntElOf(name);
+    if (cnt) cnt.textContent = '…';
+  }
+  function hasData(name) { const st = secState[name]; return !!(st && st.sec); }
   function paint(name) {
     const st = secState[name];
     const body = bodyEl(name);
@@ -1907,10 +1917,14 @@ function getHtml(): string {
     currentNames = [];                 // ensureLayout erken-dönüşünü kır -> her zaman yeniden kur
     ensureLayout(vis);                 // tabs/panes iskeleti + currentNames + applyActive
     // iskelet yeniden kurulduğu için sekme sayaç/haschg sıfırlanır; secState önbelleğinden geri yaz
-    for (const name of vis) if (secState[name] && secState[name].sec) {
-      paint(name); buildColsMenu(name); setTabCount(name);
-      const st = secState[name]; const tab = tabElOf(name);
-      if (tab) { if (st.changeCount > 0 && name !== activeName) tab.classList.add('haschg'); else tab.classList.remove('haschg'); }
+    for (const name of vis) {
+      if (secState[name] && secState[name].sec) {
+        paint(name); buildColsMenu(name); setTabCount(name);
+        const st = secState[name]; const tab = tabElOf(name);
+        if (tab) { if (st.changeCount > 0 && name !== activeName) tab.classList.add('haschg'); else tab.classList.remove('haschg'); }
+      } else {
+        paintLoading(name);   // yeni gösterilen / verisi henüz gelmemiş bölüm
+      }
     }
     recomputeChanged();   // gizlenen bölümün değişiklikleri toplamdan düşsün
   }
@@ -2070,6 +2084,8 @@ function getHtml(): string {
       sectionOrder = Array.isArray(m.order) ? m.order.slice() : vis.concat(hiddenSections);
       ensureLayout(vis);
       for (const k of Object.keys(secState)) if (vis.indexOf(k) === -1) delete secState[k];
+      // henüz çekilmemiş (verisi olmayan) görünür bölümler "Loading…" göstersin (streaming kuyruğunda bekleyenler)
+      for (const n of vis) if (!hasData(n)) paintLoading(n);
     } else if (m.type === 'endUpdate') {
       // akış bitti: aktif sekmeyi son kez boya (çapraz-link hedefleri artık yüklü) + rozet
       if (activeName && secState[activeName] && secState[activeName].sec) { paint(activeName); buildColsMenu(activeName); }
