@@ -324,6 +324,7 @@ You never declare types or sizes. Whatever `expr` evaluates to is formatted by G
 | `debugInspector.configPath`   | `debug-inspector.json`  | Path to the config file. Absolute paths are used as-is (work even with no workspace folder); a relative path is resolved against the workspace root. |
 | `debugInspector.logLevel`     | `info`                 | Verbosity of the *Debug Inspector* Output channel: `off` / `info` / `debug`. |
 | `debugInspector.debugTypes`   | `["cppdbg"]`           | Debug adapter types the tracker attaches to. Use `cppdbg` for GDB. |
+| `debugInspector.maxHardwareWatchpoints` | `4` | How many watchpoints may use hardware debug registers. Beyond this, new watchpoints become (slower) **software** watchpoints so resuming doesn't fail with *“Couldn't insert hardware watchpoints: too many.”* x86 has 4; raise it for targets with more, or `0` to always use software. |
 
 ## Logging & troubleshooting
 

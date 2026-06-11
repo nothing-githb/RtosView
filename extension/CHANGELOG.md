@@ -2,6 +2,18 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.47.0] - 2026-06-11
+
+### Fixed
+- **Resuming with several watchpoints no longer fails.** Most targets (x86) have only
+  4 hardware watchpoint registers; a 5th made *continue* fail with “Couldn't insert
+  hardware watchpoints: you may have requested too many.” Beyond
+  `debugInspector.maxHardwareWatchpoints` (default 4), new watchpoints are now created
+  as **software** watchpoints (slower but unlimited), so resume keeps working.
+
+### Added
+- `debugInspector.maxHardwareWatchpoints` setting (default 4; `0` = always software).
+
 ## [0.46.3] - 2026-06-11
 
 ### Changed

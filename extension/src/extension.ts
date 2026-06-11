@@ -979,8 +979,13 @@ function openPanel(context: vscode.ExtensionContext) {
         // GDB veri-watchpoint'i: değer değişince program durur (bellek YAZMAZ; sadece break davranışı). Opt-in (sağ-tık).
         if (!lastStopped) { vscode.window.showWarningMessage('Debug Inspector: debugger not stopped — cannot set a watchpoint.'); return; }
         if (watchpoints[msg.expr] !== undefined) { sendWatchpoints(); return; }   // zaten izleniyor
+        // HW debug register limiti (x86=4) aşılınca yeni watchpoint SOFTWARE olsun -> 'continue' "too many hw watchpoints" ile patlamasın
+        const hwLimit = Number(vscode.workspace.getConfiguration('debugInspector').get('maxHardwareWatchpoints') ?? 4);
+        const useSoftware = Object.keys(watchpoints).length >= hwLimit;
+        if (useSoftware) await gdbExec(lastStopped.session, 'set can-use-hw-watchpoints 0', lastStopped.frameId);
         const res = (await gdbExec(lastStopped.session, `watch ${msg.expr}`, lastStopped.frameId)).toString().replace(/\s+/g, ' ').trim();
-        log?.info(`watchpoint: watch ${msg.expr}  ⇒  ${res || 'ok'}`);
+        if (useSoftware) await gdbExec(lastStopped.session, 'set can-use-hw-watchpoints 1', lastStopped.frameId);
+        log?.info(`watchpoint: watch ${msg.expr} (${useSoftware ? 'software' : 'hardware'})  ⇒  ${res || 'ok'}`);
         if (/no symbol|cannot|invalid|<<error/i.test(res)) {
           vscode.window.showErrorMessage(`Debug Inspector: watchpoint failed — ${res}`);
         } else {
@@ -989,7 +994,7 @@ function openPanel(context: vscode.ExtensionContext) {
           let n = m ? parseInt(m[1], 10) : await findWatchNum(lastStopped.session, lastStopped.frameId, msg.expr);
           watchpoints[msg.expr] = Number.isFinite(n) ? n : -1;   // -1: numara bulunamadı ama izleniyor
           sendWatchpoints();
-          vscode.window.showInformationMessage(`Debug Inspector: watchpoint set on ${msg.expr}${Number.isFinite(n) ? ' (#' + n + ')' : ''} — program stops when it changes.`);
+          vscode.window.showInformationMessage(`Debug Inspector: watchpoint set on ${msg.expr}${Number.isFinite(n) ? ' (#' + n + ')' : ''}${useSoftware ? ' (software — beyond the hardware limit; resume stays reliable but slower)' : ''} — program stops when it changes.`);
         }
       } else if (msg?.type === 'unwatchpoint' && typeof msg.expr === 'string' && msg.expr) {
         // watchpoint'i kaldır (GDB 'delete <no>'); numara bilinmiyorsa info watchpoints'tan bul
