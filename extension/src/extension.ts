@@ -217,6 +217,7 @@ let refreshGen = 0;                 // her istek artar; refresh bunu izleyip esk
 const REFRESH_DEBOUNCE_MS = 140;
 let activeTab: string | undefined;  // webview'in o anki aktif sekmesi -> refresh önce onu çeker, sekme değişince öncelik değişir
 let watchpoints: Record<string, number> = {};   // izlenen l-value ifadesi -> GDB watchpoint no (★ işareti + kaldırma için)
+let wpCounter = 0;                               // her watchpoint'e benzersiz convenience var ($di_wp<N>) için sayaç
 function sendWatchpoints() { panel?.webview.postMessage({ type: 'watchpoints', exprs: Object.keys(watchpoints) }); }
 // GDB watchpoint numarasını 'info watchpoints'tan bul (cppdbg 'watch' çıktısında numarayı her zaman echo'lamaz).
 // Önce 'What' sütunu expr ile eşleşen satır; yoksa en yüksek numara (en son eklenen).
@@ -979,25 +980,30 @@ function openPanel(context: vscode.ExtensionContext) {
         // GDB veri-watchpoint'i: değer değişince program durur (bellek YAZMAZ; sadece break davranışı). Opt-in (sağ-tık).
         if (!lastStopped) { vscode.window.showWarningMessage('Debug Inspector: debugger not stopped — cannot set a watchpoint.'); return; }
         if (watchpoints[msg.expr] !== undefined) { sendWatchpoints(); return; }   // zaten izleniyor
-        // SOFTWARE watchpoint kullan -> 'continue' "too many hw watchpoints" ile patlamasın. İki durumda:
-        //  (a) pointer-deref'li ifade (->/*): GDB yol üzerindeki pointer'ları da izler -> tek watchpoint birçok HW register harcar
-        //  (b) HW limiti aşıldı (varsayılan 2)
+        const sess = lastStopped.session, fid = lastStopped.frameId;
+        // ADRES-YAKALAMA: ifadenin adresini bir convenience var'a al, sonra 'watch *$w'. Sabit adres izlenir,
+        // erişim yolundaki pointer'lar izlenmez -> deref'li (->) ifade bile TEK HW register harcar (hardware, hızlı).
+        wpCounter++;
+        const wv = '$di_wp' + wpCounter;
+        const addrRes = (await gdbExec(sess, `print ${wv} = &(${msg.expr})`, fid)).toString().replace(/\s+/g, ' ').trim();
+        // adres alınamazsa (bitfield/register/optimize) ifadeyi doğrudan izle (fallback)
+        const target = /no symbol|cannot|invalid|bit-?field|<<error/i.test(addrRes) ? msg.expr : ('*' + wv);
+        // ek güvenlik: HW limiti aşılırsa (varsayılan 2) software'e düş -> 'continue' "too many" ile patlamasın
         const hwLimit = Number(vscode.workspace.getConfiguration('debugInspector').get('maxHardwareWatchpoints') ?? 2);
-        const derefHeavy = /->|\*/.test(msg.expr);
-        const useSoftware = derefHeavy || Object.keys(watchpoints).length >= hwLimit;
-        if (useSoftware) await gdbExec(lastStopped.session, 'set can-use-hw-watchpoints 0', lastStopped.frameId);
-        const res = (await gdbExec(lastStopped.session, `watch ${msg.expr}`, lastStopped.frameId)).toString().replace(/\s+/g, ' ').trim();
-        if (useSoftware) await gdbExec(lastStopped.session, 'set can-use-hw-watchpoints 1', lastStopped.frameId);
-        log?.info(`watchpoint: watch ${msg.expr} (${useSoftware ? 'software' : 'hardware'})  ⇒  ${res || 'ok'}`);
+        const useSoftware = Object.keys(watchpoints).length >= hwLimit;
+        if (useSoftware) await gdbExec(sess, 'set can-use-hw-watchpoints 0', fid);
+        const res = (await gdbExec(sess, `watch ${target}`, fid)).toString().replace(/\s+/g, ' ').trim();
+        if (useSoftware) await gdbExec(sess, 'set can-use-hw-watchpoints 1', fid);
+        log?.info(`watchpoint: watch ${target} [${msg.expr}] (${useSoftware ? 'software' : 'hardware'})  ⇒  ${res || 'ok'}`);
         if (/no symbol|cannot|invalid|<<error/i.test(res)) {
           vscode.window.showErrorMessage(`Debug Inspector: watchpoint failed — ${res}`);
         } else {
           // HATA YOKSA izlenmiş işaretle (★) — numara parse'ına bağlı DEĞİL (cppdbg numarayı echo'lamayabilir).
           const m = res.match(/[Ww]atchpoint (\d+):/);
-          let n = m ? parseInt(m[1], 10) : await findWatchNum(lastStopped.session, lastStopped.frameId, msg.expr);
+          let n = m ? parseInt(m[1], 10) : await findWatchNum(sess, fid, target);
           watchpoints[msg.expr] = Number.isFinite(n) ? n : -1;   // -1: numara bulunamadı ama izleniyor
           sendWatchpoints();
-          vscode.window.showInformationMessage(`Debug Inspector: watchpoint set on ${msg.expr}${Number.isFinite(n) ? ' (#' + n + ')' : ''}${useSoftware ? ' (software — keeps resume reliable; slower)' : ''} — program stops when it changes.`);
+          vscode.window.showInformationMessage(`Debug Inspector: watchpoint set on ${msg.expr}${Number.isFinite(n) ? ' (#' + n + ')' : ''}${useSoftware ? ' (software — beyond the hardware limit)' : ''} — program stops when it changes.`);
         }
       } else if (msg?.type === 'unwatchpoint' && typeof msg.expr === 'string' && msg.expr) {
         // watchpoint'i kaldır (GDB 'delete <no>'); numara bilinmiyorsa info watchpoints'tan bul

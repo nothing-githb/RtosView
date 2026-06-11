@@ -2,6 +2,19 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.48.0] - 2026-06-11
+
+### Changed
+- **Watchpoints use address capture — fast hardware, one register each.** Instead of
+  `watch <expr>` (which makes GDB watch every pointer along a linked/grouped `->`
+  expression's path, using several debug registers), the extension now resolves the
+  lvalue's address once — `print $w = &(expr)` then `watch *$w` — so every watchpoint
+  uses exactly **one** hardware register and stays hardware (no slow software
+  single‑stepping). This is what actually fixes resuming with multiple deref
+  watchpoints. Software fallback now only kicks in beyond `maxHardwareWatchpoints`.
+  (Falls back to watching the expression directly if its address can't be taken, e.g.
+  a bit‑field.)
+
 ## [0.47.1] - 2026-06-11
 
 ### Fixed
