@@ -2098,7 +2098,7 @@ function getHtml(): string {
         h += '<div class="cm-item cell-watch" data-el="' + esc(trEl.dataset.el) + '">Copy row as watch expression</div>';
       if (td.dataset.lv) {   // bu hücrenin alanına GDB watchpoint'i (değer değişince durdurur)
         if (watchedExprs.has(td.dataset.lv))
-          h += '<div class="cm-item cell-unwp" data-lv="' + esc(td.dataset.lv) + '">★ Remove watchpoint</div>';
+          h += '<div class="cm-item cell-unwp" data-lv="' + esc(td.dataset.lv) + '">Remove watchpoint</div>';
         else
           h += '<div class="cm-item cell-wp" data-lv="' + esc(td.dataset.lv) + '">Add watchpoint (break on change)</div>';
       }

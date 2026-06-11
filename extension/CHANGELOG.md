@@ -2,6 +2,12 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.46.3] - 2026-06-11
+
+### Changed
+- Dropped the leading ★ from the **Remove watchpoint** menu label (the cell already
+  shows the star); the menu item now just reads “Remove watchpoint”.
+
 ## [0.46.2] - 2026-06-11
 
 ### Fixed
