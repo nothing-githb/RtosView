@@ -2,6 +2,16 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.44.0] - 2026-06-11
+
+### Added
+- **Copy a row as a watch expression.** Right‑click a row → **Copy row as watch
+  expression** copies the row's stable element expression (e.g. `(g_mutexes)[5]`,
+  `g_process_list->next->next`, or the `${master}`‑qualified path for grouped
+  sections) to the clipboard, ready to paste into VS Code's **Watch** panel. VS Code
+  exposes no API to add a watch entry programmatically, so this is a copy‑and‑paste
+  helper rather than a direct add.
+
 ## [0.43.2] - 2026-06-10
 
 ### Changed

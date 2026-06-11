@@ -454,6 +454,7 @@ async function collectRowFields(
   editRaw: string = rawElem, editWrap: string = wrapElem   // __edit__ l-value için KARARLI eleman (linked'de cursor değil root->next^i)
 ): Promise<Row> {
   const row: Row = {};
+  row['__el__'] = editWrap;   // satırın KARARLI eleman ifadesi -> "watch ifadesi olarak kopyala" (tüm modlarda geçerli)
   let parsed: Record<string, string> | null = null;
   const plainCount = fields.filter(f => isPlainExpr(f.expr) && !f.wrap).length;
   if (plainCount >= 2) {
@@ -587,7 +588,7 @@ async function collectSection(
     let guard = 0;
     let reason = 'end';
     const nx = cfg.next ?? 'next';
-    const needStable = cfg.fields.some(f => f.editable);   // edit l-value için kararlı zincir (root->next^i) sadece editable varsa kurulur
+    const needStable = true;   // kararlı zincir (root->next^i): edit l-value VE 'watch ifadesi kopyala' için her satırda gerekli
     // #2: cursor=root + ilk değer (null-check) TEK çağrıda; düğüm başına ayrı 'print cursor' turu yok
     let cur = cleanValue(await gdbExec(session, `print ${cursor} = ${cfg.root}`, frameId));
     while (true) {
@@ -955,6 +956,11 @@ function openPanel(context: vscode.ExtensionContext) {
       } else if (msg?.type === 'copy' && typeof msg.text === 'string') {
         vscode.env.clipboard.writeText(msg.text);
         log?.debug(`webview: copied ${msg.text.length} chars to clipboard`);
+      } else if (msg?.type === 'copyWatch' && typeof msg.text === 'string' && msg.text) {
+        // VS Code'da watch ifadesi EKLEMEK için public API yok -> panoya kopyala, kullanıcı Watch'a yapıştırır
+        vscode.env.clipboard.writeText(msg.text);
+        log?.info(`watch expr copied: ${msg.text}`);
+        vscode.window.showInformationMessage(`Watch expression copied — paste it into the Watch panel (Add Expression): ${msg.text}`);
       } else if (msg?.type === 'setSections') {
         sectionPrefs = {
           order: Array.isArray(msg.order) ? msg.order : [],
@@ -1608,7 +1614,7 @@ function getHtml(): string {
     const badges = opts.badges || {};
     const sortCol = opts.sortCol;
     const rk = rowKeyOf(row, columns);
-    let h = '<tr' + (ri != null ? ' data-ri="' + ri + '"' : '') + '>';   // data-ri = kaynak satır index'i (edit -> tek satır güncelleme)
+    let h = '<tr' + (ri != null ? ' data-ri="' + ri + '"' : '') + (row['__el__'] ? ' data-el="' + esc(row['__el__']) + '"' : '') + '>';   // data-ri=kaynak satır; data-el=watch ifadesi (kararlı eleman)
     for (const c of columns) {
       const ck = rk + '\\u0000' + c;
       const isChg = changed && Object.prototype.hasOwnProperty.call(changed, ck);
@@ -1817,6 +1823,8 @@ function getHtml(): string {
     // hücre bağlam menüsü: kopya / düzenle
     const cc = e.target.closest('.cell-copy');
     if (cc) { vscodeApi.postMessage({ type: 'copy', text: cc.dataset.text || '' }); for (const mm of document.querySelectorAll('.cols-menu')) mm.classList.add('hidden'); e.stopPropagation(); return; }
+    const cw = e.target.closest('.cell-watch');
+    if (cw) { vscodeApi.postMessage({ type: 'copyWatch', text: cw.dataset.el || '' }); for (const mm of document.querySelectorAll('.cols-menu')) mm.classList.add('hidden'); e.stopPropagation(); return; }
     const ce = e.target.closest('.cell-edit');
     if (ce) {
       const riAttr = ce.dataset.ri;
@@ -2028,6 +2036,9 @@ function getHtml(): string {
       e.preventDefault();
       const txt = (td.textContent || '').trim();
       let h = '<div class="cm-item cell-copy" data-text="' + esc(txt) + '">Copy cell</div>';
+      const trEl = td.closest('tr');
+      if (trEl && trEl.dataset.el)   // satırın kararlı eleman ifadesini watch için kopyala (VS Code Watch'a yapıştır)
+        h += '<div class="cm-item cell-watch" data-el="' + esc(trEl.dataset.el) + '">Copy row as watch expression</div>';
       if (td.dataset.edit) {
         const tr = td.closest('tr');
         const ri = (tr && tr.dataset.ri != null) ? tr.dataset.ri : '';
