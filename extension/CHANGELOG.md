@@ -2,6 +2,23 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.59.0] - 2026-06-12
+
+### Changed
+- **Graph node width is dynamic per section.** Each section sizes its cards to the widest
+  field it actually contains (clamped to a sensible range), instead of one fixed width for
+  every graph. Sections with short values stay compact; sections with long values get wider
+  cards so text no longer clips. Cards stay uniform within a section so the grid alignment is
+  preserved.
+- **Tree view lays out like a tree from the start.** In the default layout, tree edges now
+  leave each parent from the **bottom centre** and enter each child at the **top centre**, so
+  the connections read as a proper hierarchy rather than routing out the sides on wide trees.
+  Dragging a child above its parent still flips the edge to stay attached correctly.
+- **Minimap matches the graph's shape.** The minimap's height now tracks the graph's
+  aspect ratio (width stays fixed), so a tall graph gets a tall map and a wide graph gets a
+  short one — the overview lines up with what's on the canvas instead of always being a fixed
+  rectangle.
+
 ## [0.58.0] - 2026-06-12
 
 ### Changed

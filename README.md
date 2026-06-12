@@ -45,7 +45,8 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
   (and back with **▤ Table**). Linked/index lists flow as a **serpentine grid** along
   their `next` relationship; grouped sections as **per-group swimlane columns** (label
   on top, members beneath); arrays as a card grid. Cards show the title, fields, state
-  colour and usage bar. **Hover** highlights a node's neighbours, **click** opens a
+  colour and usage bar, and **size their width to the section's content** (compact for
+  short values, wider for long ones, uniform within a section). **Hover** highlights a node's neighbours, **click** opens a
   details panel, **drag a node** to reposition it (the placement is remembered and
   follows the row across refreshes), **drag the background** to pan, **scroll** to zoom,
   and **⤢ Fit** to recentre. When a section has cross-references, a **⇄ Links** toggle
@@ -53,11 +54,13 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
   target to jump to it). A **Find** box spotlights matching nodes — by text or a field
   test like `count>=3` / `state=running` (operators `> >= < <= = !=`, combinable),
   with Enter / Shift+Enter to cycle — and a **◉ Map** minimap helps you navigate large
-  graphs. Grouped sections pack their groups into a balanced grid; **drag a group's header**
+  graphs (its shape tracks the graph's aspect ratio, so a tall graph gets a tall map and a
+  wide one a short map). Grouped sections pack their groups into a balanced grid; **drag a group's header**
   to move the whole block. Cards show **all** of a section's visible fields. **Right-click a
   node** to copy it as a watch expression. The **⇄ Links** layer shows both outgoing and
   **incoming** cross-section links (e.g. which mutexes own a thread). `tree` sections render
-  as a hierarchical tree. Drag nodes anywhere — the canvas grows in every direction and
+  as a hierarchical tree with edges running from each parent's bottom into each child's top.
+  Drag nodes anywhere — the canvas grows in every direction and
   shrinks back. From the **table**, right-click a row → **Show in graph** to jump to its node.
 - **Usage bars.** Render a numeric field as a `used / max · %` bar
   (green → amber → red) with a field's `"bar"` — e.g. per-thread **stack usage**.
