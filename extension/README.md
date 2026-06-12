@@ -37,7 +37,8 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
   follows the row across refreshes), **drag the background** to pan, **scroll** to zoom,
   and **⤢ Fit** to recentre. When a section has cross-references, a **⇄ Links** toggle
   overlays purple links to the linked rows in other sections (deduplicated; click a
-  target to jump to it).
+  target to jump to it). A **Find** box spotlights matching nodes (Enter / Shift+Enter to
+  cycle), and a **◉ Map** minimap helps you navigate large graphs.
 - **Usage bars.** Render a numeric field as a `used / max · %` bar
   (green → amber → red) with a field's `"bar"` — e.g. per-thread **stack usage**.
 - **Cross-reference links.** A field with `"link"` renders as a clickable link to

@@ -1328,6 +1328,32 @@ function getHtml(): string {
   .gv-detail .close:hover { opacity: 1; }
   .gv-banner { font-size: 11px; opacity: 0.7; margin: 6px 2px; }
   .gv-empty { opacity: 0.55; padding: 28px 4px; font-size: 13px; }
+
+  /* ---- Graph Phase 3: search / minimap / level-of-detail ---- */
+  .gv-search {
+    flex: 0 0 150px; font-family: inherit; font-size: 12px; padding: 3px 9px; border-radius: 6px;
+    border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.3));
+    background: var(--vscode-input-background, transparent);
+    color: var(--vscode-input-foreground, var(--vscode-foreground));
+  }
+  .gv-search::placeholder { color: var(--vscode-input-placeholderForeground, rgba(128,128,128,0.7)); }
+  .gv-srch-n { font-size: 11px; opacity: 0.7; min-width: 26px; }
+  .gnode.gv-hit .card { stroke: #f1c40f; stroke-width: 2; }
+  .gnode.gv-fade { opacity: 0.12; }
+  .gedge.gv-fade { opacity: 0.06; }
+  .gnode.gv-cur .card { stroke: #f39c12; stroke-width: 3; filter: drop-shadow(0 0 5px rgba(241,196,15,0.7)); }
+  .gv-mini {
+    position: absolute; left: 12px; bottom: 12px; width: 180px; height: 120px;
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+    border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.45); cursor: pointer; opacity: 0.94; overflow: hidden;
+  }
+  .gv-mini.hidden { display: none; }
+  .gv-mini .mnode { opacity: 0.8; }
+  .gv-mini .mnode.gm-hit { fill: #f1c40f; opacity: 1; }
+  .gv-mini .gv-vp { fill: rgba(59,158,255,0.16); stroke: #3b9eff; stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .gv-wrap.lod-far .gnode .gtitle, .gv-wrap.lod-far .gnode .gsub, .gv-wrap.lod-far .gnode .gpct,
+  .gv-wrap.lod-far .gnode .gbarbg, .gv-wrap.lod-far .gnode circle { display: none; }
 </style>
 </head>
 <body>
@@ -1613,7 +1639,10 @@ function getHtml(): string {
       h += '<button class="btn view-toggle" title="Switch back to the table view">▤ Table</button>';
       h += '<button class="btn graph-fit" title="Fit the graph to the view">⤢ Fit</button>';
       if (st.sec.links && Object.keys(st.sec.links).length) h += '<button class="btn links-toggle' + ((st.gv && st.gv.links) ? ' on' : '') + '" title="Show cross-section relationship links (purple)">⇄ Links</button>';
+      h += '<input class="gv-search" type="text" placeholder="Find nodes…" value="' + esc((st.gv && st.gv.q) || '') + '" title="Find nodes — Enter / Shift+Enter to cycle matches, Esc to clear">';
+      h += '<span class="gv-srch-n"></span>';
       h += '<span class="grow"></span>';
+      h += '<button class="btn map-toggle' + ((st.gv && st.gv.mini) ? ' on' : '') + '" title="Show / hide the minimap">◉ Map</button>';
       h += '<button class="btn cols-btn" title="Show / hide / reorder the fields shown on cards">▦ Fields</button>';
       h += '</div>';
       return h;
@@ -1818,7 +1847,9 @@ function getHtml(): string {
   }
 
   // ===== Graph view (Phase 1: tek section) — linked/index zinciri · grouped ağaç · array ızgara =====
-  var GVW = 196, GVH = 62, GVGY = 18, GVGX = 64, GVPAD = 22, GVGROUPW = 188, GVGROUPH = 40, GRAPH_MAX = 400;
+  var GVW = 196, GVH = 62, GVGY = 18, GVGX = 64, GVPAD = 22, GVGROUPW = 188, GVGROUPH = 40, GRAPH_MAX = 1000;
+  // tek kaynaktan st.gv başlatma (sc/tx/ty pan-zoom; sel seçim; pos sürükle konumları; q arama; hi geçerli eşleşme; mini minimap)
+  function gvInit() { return { sc: 1, tx: 0, ty: 0, sel: null, needFit: true, pos: {}, q: '', hi: -1, mini: true }; }
   function shortVal(v) { var s = String(v == null ? '' : v); var m = s.match(/"([^"]*)"/); return m ? m[1] : s; }
   function stateHex(sc) { return sc === 's-run' ? '#2ecc71' : sc === 's-ready' ? '#3498db' : sc === 's-block' ? '#e74c3c' : sc === 's-wait' ? '#f1c40f' : null; }
   // Düğüm rengi: önce 'state/durum' kolonu, sonra config-driven rozet eşleşmesi
@@ -1913,6 +1944,13 @@ function getHtml(): string {
     // kullanıcının sürükleyip taşıdığı düğüm konumları (kalıcı) otomatik yerleşimi ezsin (kararlı pkey ile)
     var saved = st.gv && st.gv.pos;
     if (saved) nodes.forEach(function (n) { var p = saved[n.pkey]; if (p) { n.x = p.x; n.y = p.y; } });
+    // arama metni (_s, küçük harf) + index (_i, minimap/DOM eşlemesi için) önceden hesaplanır
+    nodes.forEach(function (n, i) {
+      n._i = i;
+      if (n.group) n._s = String(shortVal(n.label)).toLowerCase();
+      else if (n.ghost) n._s = (n.val + ' ' + n.tsec).toLowerCase();
+      else { var parts = []; (n.cols || []).forEach(function (c) { parts.push(c); parts.push(shortVal(n.row[c])); }); n._s = parts.join(' ').toLowerCase(); }
+    });
     var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
     var mx = 0, my = 0; nodes.forEach(function (n) { if (n.x + n.w > mx) mx = n.x + n.w; if (n.y + n.h > my) my = n.y + n.h; });
     return { nodes: nodes, edges: edges, byId: byId, capped: capped, linkCapped: linkCapped, cw: mx + GVPAD, ch: my + GVPAD };
@@ -1965,7 +2003,7 @@ function getHtml(): string {
     var row = n.row, cols = n.cols, color = nodeColor(row, cols, badges);
     var title = cols.length ? shortVal(row[cols[0]]) : '';
     var fcols = cols.slice(1, 3);
-    var s = '<g class="gnode" data-id="' + esc(n.id) + '" transform="translate(' + n.x + ',' + n.y + ')">';
+    var s = '<g class="gnode" data-id="' + esc(n.id) + '" data-search="' + esc(n._s || '') + '" transform="translate(' + n.x + ',' + n.y + ')">';
     s += '<rect class="card" width="' + n.w + '" height="' + n.h + '" rx="8"></rect>';
     if (color) s += '<rect x="0" y="0" width="4" height="' + n.h + '" rx="2" fill="' + color + '"></rect>';
     s += '<text class="gtitle" x="14" y="20">' + esc(title) + '</text>';
@@ -1997,15 +2035,22 @@ function getHtml(): string {
     var defs = '<defs><marker id="gar' + idx + '" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#7d8590"></path></marker>' +
       '<marker id="garl' + idx + '" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#b07cc6"></path></marker></defs>';
     var eg = ''; model.edges.forEach(function (ed) { var a = model.byId[ed.from], b = model.byId[ed.to]; if (!a || !b) return; eg += '<path class="gedge ' + ed.type + '" data-f="' + esc(ed.from) + '" data-t="' + esc(ed.to) + '" d="' + edgePath(a, b, ed.type) + '" marker-end="url(#' + (ed.type === 'link' ? 'garl' : 'gar') + idx + ')"></path>'; });
-    var ng = ''; model.nodes.forEach(function (n) { ng += nodeSvg(n, badges, bars); });
+    var ng = '', mini = '';
+    model.nodes.forEach(function (n) {
+      ng += nodeSvg(n, badges, bars);
+      var mcol = n.ghost ? '#b07cc6' : n.group ? '#5a5a5a' : (nodeColor(n.row, n.cols, badges) || '#7d8590');
+      mini += '<rect class="mnode" x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" fill="' + mcol + '"></rect>';
+    });
     var total = st.sec.grouped ? (st.sec.groups || []).reduce(function (a, g) { return a + (g.rows || []).length; }, 0) : (st.sec.rows || []).length;
     var bannerTxt = model.capped ? ('Showing first ' + GRAPH_MAX + ' of ' + total + ' nodes — narrow the data or use the table view for the full set.') : '';
     if (model.linkCapped) bannerTxt += (bannerTxt ? ' · ' : '') + 'Some links hidden — turn off ⇄ Links or use the table.';
     var banner = bannerTxt ? ('<div class="gv-banner">' + bannerTxt + '</div>') : '';
+    var miniHidden = (st.gv && st.gv.mini === false) ? ' hidden' : '';
     body.innerHTML = summary + tbar + banner +
-      '<div class="gv-wrap">' +
+      '<div class="gv-wrap" id="gwrap-' + idx + '">' +
       '<svg class="gv-svg" id="gsvg-' + idx + '"><g id="gvp-' + idx + '">' + defs + '<g class="gv-edges">' + eg + '</g><g class="gv-nodes">' + ng + '</g></g></svg>' +
       '<div class="gv-detail" id="gdet-' + idx + '"><span class="close" id="gdc-' + idx + '">✕</span><h3 id="gdt-' + idx + '"></h3><div id="gdb-' + idx + '"></div></div>' +
+      '<svg class="gv-mini' + miniHidden + '" id="gmini-' + idx + '"><g id="gmg-' + idx + '">' + mini + '<rect class="gv-vp" id="gvpr-' + idx + '"></rect></g></svg>' +
       '</div>';
     wireGraph(name, model, idx);
   }
@@ -2013,10 +2058,71 @@ function getHtml(): string {
     var st = secState[name];
     var svg = document.getElementById('gsvg-' + idx), vp = document.getElementById('gvp-' + idx), det = document.getElementById('gdet-' + idx);
     if (!svg || !vp) return;
-    st.gv = st.gv || { sc: 1, tx: 0, ty: 0, sel: null, needFit: true, pos: {} };
+    st.gv = st.gv || gvInit();
     st.gv.pos = st.gv.pos || {};
+    if (st.gv.q == null) st.gv.q = '';
+    if (st.gv.hi == null) st.gv.hi = -1;
+    if (st.gv.mini == null) st.gv.mini = true;
     var nd = null, suppressClick = false;   // nd = sürüklenen düğüm; suppressClick = sürükleme sonrası tıklamayı yut
+    var nodeEls = vp.querySelectorAll('.gnode');   // cache (per-tuş arama + minimap eşlemesi index ile)
     var edgeEls = vp.querySelectorAll('.gedge');
+    var gwrap = document.getElementById('gwrap-' + idx);
+    var miniSvg = document.getElementById('gmini-' + idx), mg = document.getElementById('gmg-' + idx), vpR = document.getElementById('gvpr-' + idx);
+    var miniRects = mg ? mg.querySelectorAll('.mnode') : null;
+    var pbody = bodyEl(name);
+    var sBox = pbody ? pbody.querySelector('.gv-search') : null, sN = pbody ? pbody.querySelector('.gv-srch-n') : null;
+    var MMW = 180, MMH = 120, mscale = 1, hits = [];
+    function setMiniScale() {   // graf'ı minimap kutusuna sığdıran ölçek (bounds değişince güncellenir)
+      var ms = Math.min(MMW / model.cw, MMH / model.ch); if (!isFinite(ms) || ms <= 0) ms = 1;
+      mscale = ms; if (mg) mg.setAttribute('transform', 'scale(' + ms + ')');
+    }
+    setMiniScale();
+    function syncMini() {   // minimap viewport dikdörtgeni (graf koordinatında; gmg ölçeği küçültür)
+      if (!vpR) return;
+      var sw = svg.clientWidth || model.cw, sh = svg.clientHeight || model.ch;
+      vpR.setAttribute('x', -st.gv.tx / st.gv.sc); vpR.setAttribute('y', -st.gv.ty / st.gv.sc);
+      vpR.setAttribute('width', Math.max(0, sw / st.gv.sc)); vpR.setAttribute('height', Math.max(0, sh / st.gv.sc));
+    }
+    function nudgeMiniNode(n) { if (!miniRects || !n) return; var mr = miniRects[n._i]; if (mr) { mr.setAttribute('x', n.x); mr.setAttribute('y', n.y); } }
+    function centerPoint(gx, gy, useSc) {
+      var sw = svg.clientWidth || model.cw, sh = svg.clientHeight || model.ch;
+      if (useSc) st.gv.sc = useSc;
+      st.gv.tx = sw / 2 - gx * st.gv.sc; st.gv.ty = sh / 2 - gy * st.gv.sc; apply();
+    }
+    function centerOn(n) { if (n) centerPoint(n.x + n.w / 2, n.y + n.h / 2, Math.max(0.8, Math.min(1.4, st.gv.sc))); }
+    function markCur() {
+      if (!nodeEls || !nodeEls.forEach) return;
+      nodeEls.forEach(function (el) { el.classList.remove('gv-cur'); });
+      if (st.gv.hi >= 0 && hits[st.gv.hi] != null && nodeEls[hits[st.gv.hi]]) nodeEls[hits[st.gv.hi]].classList.add('gv-cur');
+    }
+    function applySearch() {   // AND-eşleşme: vurgula (gv-hit), eşleşmeyeni soluklaştır (gv-fade), minimap'ta heatmap (gm-hit)
+      var terms = (st.gv.q || '').trim().toLowerCase();
+      terms = terms ? terms.split(/\\s+/) : [];
+      if (terms.length) {   // arama başlarken önceki seçim/hover .dim/.ehl katmanını temizle (yoksa hit'ler %16 soluk kalır)
+        if (nodeEls && nodeEls.forEach) nodeEls.forEach(function (g) { g.classList.remove('dim'); });
+        if (edgeEls && edgeEls.forEach) edgeEls.forEach(function (p) { p.classList.remove('dim'); p.classList.remove('ehl'); });
+      }
+      hits = []; var hitIds = {};
+      if (nodeEls && nodeEls.forEach) nodeEls.forEach(function (el, i) {
+        var n = model.nodes[i]; var on = !!(n && terms.length && terms.every(function (t) { return n._s.indexOf(t) !== -1; }));
+        if (on) { hits.push(i); hitIds[n.id] = 1; }
+        el.classList.toggle('gv-hit', on); el.classList.toggle('gv-fade', terms.length && !on);
+      });
+      if (miniRects && miniRects.forEach) miniRects.forEach(function (mr, i) { var n = model.nodes[i]; mr.classList.toggle('gm-hit', !!(n && hitIds[n.id])); });
+      // kenar-fade: model index'i yerine DOM data-f/data-t ile (renderGraph bir kenarı atlasa bile index kaymaz)
+      if (edgeEls && edgeEls.forEach) edgeEls.forEach(function (p) { var on = !!(hitIds[p.getAttribute('data-f')] && hitIds[p.getAttribute('data-t')]); p.classList.toggle('gv-fade', terms.length && !on); });
+      if (gwrap) gwrap.classList.toggle('searching', !!terms.length);
+      if (st.gv.hi >= hits.length) st.gv.hi = -1;
+      if (sN) sN.textContent = !terms.length ? '' : (!hits.length ? '0' : ((st.gv.hi >= 0 ? (st.gv.hi + 1) + ' / ' : '') + hits.length));
+      markCur();
+      if (!terms.length && st.gv.sel && model.byId[st.gv.sel]) focus(st.gv.sel);   // arama temizlendi + seçim duruyor -> seçim spotlight'ını geri uygula
+    }
+    function cycle(d) {   // Enter / Shift+Enter: sıradaki/önceki eşleşmeye merkezle
+      if (!hits.length) return;
+      st.gv.hi = st.gv.hi < 0 ? (d > 0 ? 0 : hits.length - 1) : (st.gv.hi + d + hits.length) % hits.length;
+      markCur(); centerOn(model.nodes[hits[st.gv.hi]]);
+      if (sN) sN.textContent = (st.gv.hi + 1) + ' / ' + hits.length;
+    }
     function redrawEdges(movedId) {
       if (!edgeEls || !edgeEls.forEach) return;   // DOM-shim: boş NodeList -> güvenli no-op
       edgeEls.forEach(function (p) {
@@ -2031,7 +2137,11 @@ function getHtml(): string {
       model.nodes.forEach(function (n) { if (n.x + n.w > mx) mx = n.x + n.w; if (n.y + n.h > my) my = n.y + n.h; });
       model.cw = mx + GVPAD; model.ch = my + GVPAD;
     }
-    function apply() { vp.setAttribute('transform', 'translate(' + st.gv.tx + ',' + st.gv.ty + ') scale(' + st.gv.sc + ')'); }
+    function apply() {
+      vp.setAttribute('transform', 'translate(' + st.gv.tx + ',' + st.gv.ty + ') scale(' + st.gv.sc + ')');
+      if (gwrap) gwrap.classList.toggle('lod-far', st.gv.sc < 0.45);   // çok uzakta: kart metnini gizle (büyük graf perf)
+      syncMini();
+    }
     function fit() {
       var sw = svg.clientWidth, sh = svg.clientHeight;
       if (!sw || !sh) { st.gv.needFit = true; apply(); return; }
@@ -2042,10 +2152,17 @@ function getHtml(): string {
     function neighbors(id) { var ns = {}; ns[id] = 1; model.edges.forEach(function (e) { if (e.from === id || e.to === id) { ns[e.from] = 1; ns[e.to] = 1; } }); return ns; }
     function focus(id) {
       var ns = neighbors(id);
+      if (st.gv.q) {   // arama aktif: hit/fade spotlight'ı bozma, sadece komşu kenarları vurgula
+        vp.querySelectorAll('.gedge').forEach(function (p) { var on = ns[p.getAttribute('data-f')] && ns[p.getAttribute('data-t')] && (p.getAttribute('data-f') === id || p.getAttribute('data-t') === id); p.classList.toggle('ehl', !!on); });
+        return;
+      }
       vp.querySelectorAll('.gnode').forEach(function (g) { g.classList.toggle('dim', !ns[g.getAttribute('data-id')]); });
       vp.querySelectorAll('.gedge').forEach(function (p) { var on = ns[p.getAttribute('data-f')] && ns[p.getAttribute('data-t')] && (p.getAttribute('data-f') === id || p.getAttribute('data-t') === id); p.classList.toggle('dim', !on); p.classList.toggle('ehl', !!on); });
     }
-    function clearFocus() { vp.querySelectorAll('.gnode').forEach(function (g) { g.classList.remove('dim'); }); vp.querySelectorAll('.gedge').forEach(function (p) { p.classList.remove('dim'); p.classList.remove('ehl'); }); }
+    function clearFocus() {
+      if (st.gv.q) { vp.querySelectorAll('.gedge').forEach(function (p) { p.classList.remove('ehl'); }); return; }
+      vp.querySelectorAll('.gnode').forEach(function (g) { g.classList.remove('dim'); }); vp.querySelectorAll('.gedge').forEach(function (p) { p.classList.remove('dim'); p.classList.remove('ehl'); });
+    }
     function detailFor(id) {
       var n = model.byId[id]; if (!n) return;
       if (n.ghost) {   // ghost'ta n.row/n.cols yok -> ayrı detay; tıklarsa gotoXref zaten hedefe götürür
@@ -2101,7 +2218,7 @@ function getHtml(): string {
         n.x = Math.max(0, nd.ox + (e.clientX - nd.sx) / st.gv.sc);
         n.y = Math.max(0, nd.oy + (e.clientY - nd.sy) / st.gv.sc);
         nd.g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
-        redrawEdges(nd.id);
+        redrawEdges(nd.id); nudgeMiniNode(n);
         return;
       }
       if (!dragging) return; st.gv.tx += e.clientX - lx; st.gv.ty += e.clientY - ly; lx = e.clientX; ly = e.clientY; apply();
@@ -2111,15 +2228,33 @@ function getHtml(): string {
         if (nd.moved) {
           var n = model.byId[nd.id];
           if (n) st.gv.pos[n.pkey] = { x: n.x, y: n.y };   // taşınan konumu KARARLI satır kimliğiyle sakla (yeniden sıralamaya dayanıklı)
-          suppressClick = true; recomputeBounds();
+          suppressClick = true; recomputeBounds(); setMiniScale(); nudgeMiniNode(n); syncMini();
         }
         nd.g.classList.remove('gv-dragging'); nd = null;
       }
       dragging = false; svg.classList.remove('panning');
     }
     svg.addEventListener('mouseup', endPan); svg.addEventListener('mouseleave', endPan);
+    // arama kutusu: anlık eşleşme; Enter/Shift+Enter eşleşmeler arası gez; Esc temizle
+    if (sBox) {
+      sBox.addEventListener('input', function () { st.gv.q = sBox.value; st.gv.hi = -1; applySearch(); });
+      sBox.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
+        else if (e.key === 'Escape') { e.preventDefault(); st.gv.q = ''; st.gv.hi = -1; sBox.value = ''; applySearch(); sBox.blur(); }
+      });
+    }
+    // minimap: tıkla/sürükle -> ana görünümü o noktaya merkezle
+    if (miniSvg) {
+      var mpan = false;
+      var miniTo = function (e) { var r = miniSvg.getBoundingClientRect(); centerPoint((e.clientX - r.left) / mscale, (e.clientY - r.top) / mscale, st.gv.sc); };
+      miniSvg.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); mpan = true; miniTo(e); });
+      miniSvg.addEventListener('mousemove', function (e) { if (mpan) miniTo(e); });
+      var mEnd = function () { mpan = false; };
+      miniSvg.addEventListener('mouseup', mEnd); miniSvg.addEventListener('mouseleave', mEnd);
+    }
     st._fit = fit;
     if (st.gv.sel && model.byId[st.gv.sel]) selectNode(st.gv.sel); else st.gv.sel = st.gv.sel && model.byId[st.gv.sel] ? st.gv.sel : null;
+    if (st.gv.q) { if (sBox) sBox.value = st.gv.q; applySearch(); } else syncMini();   // refresh sonrası arama/minimap durumunu geri uygula
   }
 
   // henüz verisi gelmemiş (streaming sırasında sırada bekleyen / yeni gösterilen) bölüm için yer tutucu
@@ -2302,7 +2437,7 @@ function getHtml(): string {
     // tablo <-> graph görünüm geçişi
     if (e.target.closest('.view-toggle')) {
       const name = paneName(e); const st = secState[name];
-      if (st) { st.view = st.view === 'graph' ? 'table' : 'graph'; if (st.view === 'graph' && !st.gv) st.gv = { sc: 1, tx: 0, ty: 0, sel: null, needFit: true, pos: {} }; paint(name); }
+      if (st) { st.view = st.view === 'graph' ? 'table' : 'graph'; if (st.view === 'graph' && !st.gv) st.gv = gvInit(); paint(name); }
       return;
     }
     // graph: görünüme sığdır
@@ -2314,7 +2449,13 @@ function getHtml(): string {
     // graph: cross-section link katmanını aç/kapa (Phase 2)
     if (e.target.closest('.links-toggle')) {
       const name = paneName(e); const st = secState[name];
-      if (st) { if (!st.gv) st.gv = { sc: 1, tx: 0, ty: 0, sel: null, needFit: true, pos: {} }; st.gv.links = !st.gv.links; paint(name); }
+      if (st) { if (!st.gv) st.gv = gvInit(); st.gv.links = !st.gv.links; paint(name); }
+      return;
+    }
+    // graph: minimap'i aç/kapa (Phase 3) — yeniden çizmeden, sadece CSS
+    if (e.target.closest('.map-toggle')) {
+      const name = paneName(e); const st = secState[name]; const mb = e.target.closest('.map-toggle');
+      if (st) { if (!st.gv) st.gv = gvInit(); st.gv.mini = !st.gv.mini; mb.classList.toggle('on', st.gv.mini); const bd = bodyEl(name); const mn = bd && bd.querySelector('.gv-mini'); if (mn) mn.classList.toggle('hidden', !st.gv.mini); }
       return;
     }
     // grup: düz/ağaç görünüm geçişi

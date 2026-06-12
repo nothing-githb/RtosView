@@ -2,6 +2,20 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.52.0] - 2026-06-12
+
+### Added
+- **Graph search/focus.** A **Find** box in the graph toolbar spotlights matching nodes
+  (across the title and every shown field) and dims the rest; **Enter / Shift+Enter**
+  cycle through matches, centering each, with an *n / total* counter; **Esc** clears.
+- **Minimap.** A small overview sits at the bottom-left with a rectangle showing the
+  current viewport — **click or drag it to navigate** a large graph. Search matches light
+  up on it as a heatmap. Toggle it with **◉ Map**.
+
+### Changed
+- **Larger graphs stay responsive.** The node cap was raised, and when you zoom far out
+  the cards drop their text (a level-of-detail step) so big graphs pan and zoom smoothly.
+
 ## [0.51.0] - 2026-06-11
 
 ### Added
