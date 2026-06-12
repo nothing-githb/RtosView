@@ -110,14 +110,14 @@ typedef struct bnode {
 
 /* ---- global'ler (YÜZLERCE satır: ana tablolar döngülerle üretilir) ---- */
 #define N_PROC      8                  /* master process sayisi */
-#define TPP         32                 /* thread / process -> 256 thread */
-#define SPP         24                 /* sem / process    -> 192 sem */
-#define SLOT_BLK    32                 /* slot / process   -> 256 slot */
+#define TPP         6                  /* thread / process -> 48 thread */
+#define SPP         6                  /* sem / process    -> 48 sem */
+#define SLOT_BLK    6                  /* slot / process   -> 48 slot */
 #define MAX_THREADS (N_PROC * TPP)
 #define MAX_SEMS    (N_PROC * SPP)
-#define MAX_MUTEXES 200
-#define MAX_TIMERS  300
-#define MAX_WIDGETS 256
+#define MAX_MUTEXES 50
+#define MAX_TIMERS  50
+#define MAX_WIDGETS 50
 #define MAX_PROCS   N_PROC
 #define MAX_SLOTS   (N_PROC * SLOT_BLK)
 
