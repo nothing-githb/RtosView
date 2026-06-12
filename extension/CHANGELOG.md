@@ -2,6 +2,15 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.57.0] - 2026-06-12
+
+### Changed
+- **Graph edges and their arrowheads now read as one object.** The arrowhead takes the
+  line's colour in every state — grey at rest, purple for links, blue when highlighted —
+  and they transition together (previously the line changed colour but the triangle stayed
+  grey). The arrowhead is also a fixed size, so it no longer balloons when a highlighted
+  line thickens.
+
 ## [0.56.0] - 2026-06-12
 
 ### Added

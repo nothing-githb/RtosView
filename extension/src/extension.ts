@@ -2194,9 +2194,10 @@ function getHtml(): string {
     var tbar = toolbarHtml(st);
     var summary = '<div class="summary">' + esc(st.sec.summary || '') + '</div>';
     if (!model.nodes.length) { body.innerHTML = summary + tbar + '<div class="gv-empty">Nothing to graph (list is empty).</div>'; return; }
-    var defs = '<defs><marker id="gar' + idx + '" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#7d8590"></path></marker>' +
-      '<marker id="garl' + idx + '" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#b07cc6"></path></marker></defs>';
-    var eg = ''; model.edges.forEach(function (ed) { var a = model.byId[ed.from], b = model.byId[ed.to]; if (!a || !b) return; eg += '<path class="gedge ' + ed.type + '" data-f="' + esc(ed.from) + '" data-t="' + esc(ed.to) + '" d="' + edgePath(a, b, ed.type) + '" marker-end="url(#' + (ed.type === 'link' ? 'garl' : 'gar') + idx + ')"></path>'; });
+    // TEK ok marker'ı: SABİT boyut (userSpaceOnUse -> stroke kalınlığıyla ölçeklenmez) + fill=context-stroke
+    // -> ok her zaman çizginin rengini alır (normal gri / link mor / highlight mavi) ve birlikte hareket eder.
+    var defs = '<defs><marker id="gar' + idx + '" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="context-stroke"></path></marker></defs>';
+    var eg = ''; model.edges.forEach(function (ed) { var a = model.byId[ed.from], b = model.byId[ed.to]; if (!a || !b) return; eg += '<path class="gedge ' + ed.type + '" data-f="' + esc(ed.from) + '" data-t="' + esc(ed.to) + '" d="' + edgePath(a, b, ed.type) + '" marker-end="url(#gar' + idx + ')"></path>'; });
     var ng = '', mini = '';
     model.nodes.forEach(function (n) {
       ng += nodeSvg(n, badges, bars);
