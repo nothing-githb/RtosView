@@ -20,14 +20,14 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
 - **Copy out & export.** Copy the (filtered) table as **CSV** or **Markdown** in one click (grouped tables add a leading `Group` column); or **⤓ JSON** in the top bar **exports every section's data to a JSON file** (save dialog).
 - **Per-column number base & alignment.** Show any numeric column as **dec / hex / bin** via a click-to-cycle base button in the column header's top-right (`raw`→`bin`→`dec`→`hex`), or set a default in config with a field's `"base"`. Numeric columns right-align with tabular figures, and hovering any cell shows its full value in a tooltip.
 - **Sticky header.** The header row stays put while you scroll a long table.
-- **Refresh on demand or on change.** A **Refresh** button re-reads the config without restarting the debugger (its icon **spins and reads “Refreshing…”** while a refresh is in progress), and the panel also refreshes automatically when the config file changes on disk (while stopped). A config edit that only changes **presentation** — a column's `base`, a `bar`'s `warn`/`crit` thresholds, a `link`, or `badge` colors — is applied **without re-reading anything from GDB**; only data-affecting edits (`expr`, `root`/`next`/`count`/`cast`/`wrap`, `mode`, `bar.max`, `editable`, `when`, adding/removing fields, …) trigger an actual refresh.
+- **Refresh on demand or on change.** A **Refresh** button re-reads the config without restarting the debugger (its icon **spins and reads “Refreshing…”** while a refresh is in progress), and the panel also refreshes automatically when the config file changes on disk (while stopped). A config edit that only changes **presentation** — a column's `base`, a `bar`'s `warn`/`crit` thresholds, a `link`, `badge` colors, or a `valueMap` — is applied **without re-reading anything from GDB**; only data-affecting edits (`expr`, `root`/`next`/`count`/`cast`/`wrap`, `mode`, `bar.max`, `editable`, `when`, adding/removing fields, …) trigger an actual refresh.
 - **Pause / Resume.** Stop auto-refreshing and querying GDB on each stop when you don't need it; Refresh still does a one-shot. Remembered per workspace.
 - **Change highlighting.** Cells that changed since the previous stop are amber-highlighted, with the previous value shown faded and struck-through next to the new one. A `N changed` badge shows the total; tabs that changed in the background flag their count.
 - **Pick & reorder columns.** Drag a column header (or a row in the **▦ Columns** menu) to reorder — a bold blue insertion line marks the drop target and a drag-preview chip follows the cursor. Right-click a header or use the menu to show/hide. Order and visibility persist per workspace. Hidden columns are **not** read from GDB at all; enabling one fetches **only that column** on the spot (merged into the existing rows — the rest of the panel isn't re-read).
 - **Grouping (tree).** Relate sections: render one section, in its own tab, as a
   collapsible tree grouped under a master section (`groupBy` + `${master}`) — e.g.
   every process's semaphores under its process node — all at once, with a
-  flat-view toggle.
+  flat-view toggle and a one-click **Collapse all / Expand all** control.
 - **Graph view.** Toggle any section to an interactive node graph with **◉ Graph**
   (and back with **▤ Table**). Linked/index lists flow as a **serpentine grid** along
   their `next` relationship; grouped sections as **per-group swimlane columns** (label
@@ -63,7 +63,7 @@ Debug Inspector turns the structures *you* describe into clean, tabbed, sortable
   remembered per workspace. Revealing a hidden section fetches **only that section**
   (not the whole panel). A section can also start hidden with `"hidden": true`
   in config.
-- **Readable UI.** Recognized columns get automatic styling: a `State` column becomes a colored badge (RUNNING / READY / BLOCKED / WAITING — or your own value→color map via a field's `"badge"`), plus a summary line per tab. Changed cells light up amber.
+- **Readable UI.** Recognized columns get automatic styling: a `State` column becomes a colored badge (RUNNING / READY / BLOCKED / WAITING — or your own value→color map via a field's `"badge"`, or a value→text+color map via `"valueMap"`), plus a summary line per tab. Changed cells light up amber.
 - **Read-only by default (optional editing).** Debug Inspector only *reads* your data — it never calls functions. A field can opt into editing with `"editable": true`; then right-click → **Edit value…** writes it with GDB `set var`, and **only the edited row is re-read** afterwards (not the whole panel). Right-click any cell also offers **Copy cell** and **Copy row as watch expression** — the latter copies the row's stable element expression (e.g. `(g_mutexes)[5]`, or the master‑qualified path for grouped sections) so you can paste it into VS Code's **Watch** panel (VS Code has no API to add a watch entry directly). A plain‑member (or editable) cell also offers **Add watchpoint (break on change)**, which sets a GDB data watchpoint on that field's **resolved address** (one hardware register, even for linked/grouped cells) so the program stops when it changes — it doesn't write memory. A watched cell is then marked with a gold **★** (and a left accent), its hover tooltip notes the watchpoint, and its menu switches to **★ Remove watchpoint** (runs GDB `delete`). Stars persist across refreshes and clear when the session ends.
 - **Leveled, color-coded logging.** A *Debug Inspector* Output channel (rendered with the `log` syntax so timestamps/severities/values are colorized); pick `off` / `info` / `debug`.
 
@@ -333,6 +333,13 @@ Any `fields` entry can carry extra options beyond `label`/`expr`. One example ea
 
 ```json
 { "label": "State", "expr": "state", "badge": { "RUNNING": "green", "READY": "cyan", "BLOCKED": "red", "WAITING": "amber" } }
+```
+
+**Value mapping** (`valueMap`) — render a value as a custom **text** *and* **color** (the text-changing superset of `badge`, which only colors). Give a plain string to change just the displayed text, or `{ "text": ..., "color": ... }` to change both. `color` is a name (as above) or a `#rrggbb` hex. Matching is case‑insensitive exact (and also matches an enum's quoted name). Applies in both the table cell and the graph card (where the color also tints the card's accent stripe):
+
+```json
+{ "label": "Locked", "expr": "locked", "valueMap": { "0": { "text": "free", "color": "#2ecc71" }, "1": { "text": "HELD", "color": "#e74c3c" } } }
+{ "label": "Active", "expr": "active", "valueMap": { "0": "idle", "1": "armed" } }
 ```
 
 ### Notes on `expr` and rendering

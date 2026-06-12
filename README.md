@@ -40,7 +40,7 @@ hobby or commercial RTOS, or plain application code. It is **config-driven** and
 - **Grouping (tree).** Relate sections: a section can show, in its own tab, as a
   collapsible tree grouped under a master section (`groupBy` + `${master}`) — e.g.
   every process's semaphores under its process node — all at once, with a
-  Flat-view toggle.
+  Flat-view toggle and a one-click **Collapse all / Expand all** control.
 - **Graph view.** Toggle any section to an interactive node graph with **◉ Graph**
   (and back with **▤ Table**). Linked/index lists flow as a **serpentine grid** along
   their `next` relationship; grouped sections as **per-group swimlane columns** (label
@@ -179,7 +179,7 @@ Every field, across all modes:
 | `mode`    | all | — (required) | `"linked_list"`, `"array"`, `"index_list"`, or `"tree"`. Selects the traversal. |
 | `root`    | all | — (required) | Starting expression in your program's own syntax (head pointer, array, buffer, or tree root). May contain `${master}` (grouping). |
 | `children`| tree | `["left","right"]` | Child-pointer field names followed from each node (BFS). The graph view lays the result out as a hierarchical tree. |
-| `fields`  | all | — (required) | Ordered list of `{ "label", "expr" }` columns. `label` is the header (and first column = row identity); `expr` is the accessor appended after the element, OR a computed expression using `${expr}` / `${wrapped_expr}` (the element, like `wrap`/`next`) — e.g. `"${expr}->stack_size - ${expr}->stack_used"` for arithmetic across two members. A field may add `"hidden": true` (start collapsed), `"base": "dec"\|"hex"\|"bin"` (default number base), `"bar": { "max": "<expr>", "warn": 75, "crit": 90 }` (render as a usage bar), and/or `"link": { "section": "<target>", "match": "<column>" }` (clickable cross-reference — jump to the target row whose `match` column equals this value; `match` defaults to the target's first column), and/or `"when": "<bool expr>"` (conditional field — blank when false; several on one discriminator make a variant/tagged‑union), `"editable": true` (right‑click → **Edit value…** writes via GDB `set var`; assignable fields only), `"wrap": "<tmpl>"` (transform the field value *after* access — `${expr}` = the accessed value, e.g. `expr:"data"` + `wrap:"((widget_t *)${expr})->x"`), and/or `"badge": { "<value>": "<color>" }` (value→color badge — names like `green`/`red`/`amber`/`cyan` or `#rrggbb` — overriding the built‑in `State` coloring). |
+| `fields`  | all | — (required) | Ordered list of `{ "label", "expr" }` columns. `label` is the header (and first column = row identity); `expr` is the accessor appended after the element, OR a computed expression using `${expr}` / `${wrapped_expr}` (the element, like `wrap`/`next`) — e.g. `"${expr}->stack_size - ${expr}->stack_used"` for arithmetic across two members. A field may add `"hidden": true` (start collapsed), `"base": "dec"\|"hex"\|"bin"` (default number base), `"bar": { "max": "<expr>", "warn": 75, "crit": 90 }` (render as a usage bar), and/or `"link": { "section": "<target>", "match": "<column>" }` (clickable cross-reference — jump to the target row whose `match` column equals this value; `match` defaults to the target's first column), and/or `"when": "<bool expr>"` (conditional field — blank when false; several on one discriminator make a variant/tagged‑union), `"editable": true` (right‑click → **Edit value…** writes via GDB `set var`; assignable fields only), `"wrap": "<tmpl>"` (transform the field value *after* access — `${expr}` = the accessed value, e.g. `expr:"data"` + `wrap:"((widget_t *)${expr})->x"`), and/or `"badge": { "<value>": "<color>" }` (value→color badge — names like `green`/`red`/`amber`/`cyan` or `#rrggbb` — overriding the built‑in `State` coloring), and/or `"valueMap": { "<value>": "<text>" \| { "text", "color" } }` (render a value as custom **text + color** — the text‑changing superset of `badge`; applies in the table cell and the graph card). |
 | `next`    | linked_list, index_list | — (set it) | linked_list: the pointer field to the next node (used as `cursor->next`). index_list: the field holding the next **index**, OR a `${expr}` template that computes it (like `wrap` — `${expr}` is the element; e.g. `"${expr}.link.idx"` or `"g_succ[${expr}.id]"`). The traversal uses this verbatim, so set it; it is only assumed to be `next` when building a grouped master's selector expression. |
 | `head`    | index_list | — | Starting **index** expression, read once. May contain `${master}` (grouping). |
 | `nil`     | index_list | `-1` | Sentinel index that ends the walk. May contain `${master}` (grouping). |
@@ -483,6 +483,11 @@ Any `fields` entry can carry these — one example each:
 
 // Badge colors: map values to colored badges (overrides built-in State coloring); names or #rrggbb
 { "label": "State", "expr": "state", "badge": { "RUNNING": "green", "READY": "cyan", "BLOCKED": "red", "WAITING": "amber" } }
+
+// Value mapping: render a value as custom TEXT + COLOR (text-changing superset of badge).
+// Plain string changes just the text; { text, color } changes both. Applies in table + graph card.
+{ "label": "Locked", "expr": "locked", "valueMap": { "0": { "text": "free", "color": "#2ecc71" }, "1": { "text": "HELD", "color": "#e74c3c" } } }
+{ "label": "Active", "expr": "active", "valueMap": { "0": "idle", "1": "armed" } }
 ```
 
 ## Settings

@@ -13,6 +13,7 @@ interface FieldCfg {
   editable?: boolean;  // sağ-tık 'Edit value' ile düzenlenebilir (GDB 'set var' ile debuggee'ye YAZAR). Sadece atanabilir (L-value) ifadeler; aksi halde GDB hata verir.
   wrap?: string;  // alana ERİŞTİKTEN SONRA değeri dönüştür; ${expr} = erişilen alan değeri. Örn expr "data" + wrap "((widget_t *)${expr})->x" -> ((widget_t *)(elem.data))->x. Sonuç hücreye yazılır.
   badge?: Record<string, string>;  // değer -> renk rozet eşlemesi (case-insensitive tam eşleşme); renk adı (green/blue/red/amber/purple/cyan/gray) veya #rrggbb. Verilirse built-in State/Discipline heuristic'i yerine bu kullanılır.
+  valueMap?: Record<string, string | { text?: string; color?: string }>;  // değer -> görüntü. Düz string verilirse görüntülenecek METİN; {text,color} ile metin ve/veya renk. color: renk adı veya #rrggbb. badge'den farkı: badge yalnız renklendirir, valueMap METNİ de değiştirir (örn 2 -> "XXX" + #ff0000). Tablo hücresinde ve graph kartında uygulanır.
 }
 interface SectionCfg {
   mode: 'linked_list' | 'array' | 'index_list' | 'tree';
@@ -41,6 +42,7 @@ interface Section {
   bars?: Record<string, { warn: number; crit: number }>;   // kolon -> kullanım çubuğu eşikleri (max değeri row['__bar__'+kolon]'da)
   links?: Record<string, { section: string; match?: string }>;   // kolon -> çapraz-referans hedefi (section + match kolonu)
   badges?: Record<string, Record<string, string>>;   // kolon -> değer->renk rozet eşlemesi
+  valueMap?: Record<string, Record<string, { text?: string; color?: string }>>;   // kolon -> değer -> {metin, renk} görüntü eşlemesi (badge'in metin değiştiren üst kümesi)
   needsSelection?: boolean;   // gruplu bölüm: master bölüm boş/bulunamadı
   grouped?: boolean;          // groupBy ile ağaç olarak gruplanmış
   groups?: Group[];           // her master elemanı için bir grup
@@ -204,7 +206,7 @@ function onConfigChange() {
     panel.webview.postMessage({
       type: 'presentationUpdate', section: name,
       bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields),
-      links: fieldLinks(scfg.fields), badges: fieldBadges(scfg.fields)
+      links: fieldLinks(scfg.fields), badges: fieldBadges(scfg.fields), valueMap: fieldValueMap(scfg.fields)
     });
   }
 }
@@ -767,6 +769,27 @@ function fieldBadges(fields: FieldCfg[]): Record<string, Record<string, string>>
   for (const f of fields) if (f.badge && typeof f.badge === 'object') m[f.label] = f.badge;
   return m;
 }
+// config-driven değer eşlemesi: değer -> {metin, renk} (field.valueMap). Düz string -> {text}; nesne -> {text?,color?}.
+function fieldValueMap(fields: FieldCfg[]): Record<string, Record<string, { text?: string; color?: string }>> {
+  const out: Record<string, Record<string, { text?: string; color?: string }>> = {};
+  for (const f of fields) {
+    if (!f.valueMap || typeof f.valueMap !== 'object') continue;
+    const m: Record<string, { text?: string; color?: string }> = {};
+    for (const k of Object.keys(f.valueMap)) {
+      const v = (f.valueMap as Record<string, unknown>)[k];
+      if (typeof v === 'string') { m[k] = { text: v }; }
+      else if (v && typeof v === 'object') {
+        const e: { text?: string; color?: string } = {};
+        const vt = (v as { text?: unknown }).text, vc = (v as { color?: unknown }).color;
+        if (typeof vt === 'string') e.text = vt;
+        if (typeof vc === 'string') e.color = vc;
+        if (e.text != null || e.color != null) m[k] = e;
+      }
+    }
+    if (Object.keys(m).length) out[f.label] = m;
+  }
+  return out;
+}
 
 // Yalnız AKTİF sütunları gdb'den çek (pasif sütunlar için print çalıştırılmaz)
 async function buildSection(
@@ -784,7 +807,7 @@ async function buildSection(
   const rows = await collectSection(session, { ...cfg, fields: effFields }, frameId, cursor, name, isStale);
   log?.debug(`section "${name}" (${cfg.mode}, root=${cfg.root}): ${rows.length} row(s); active=[${eff.active.join(', ')}]`);
   const kind: 'linked' | 'array' | 'index' | 'tree' = cfg.mode === 'array' ? 'array' : cfg.mode === 'index_list' ? 'index' : cfg.mode === 'tree' ? 'tree' : 'linked';
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields), bars: fieldBars(cfg.fields), links: fieldLinks(cfg.fields), badges: fieldBadges(cfg.fields), kind };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows, summary: summarize(name, rows), bases: fieldBases(cfg.fields), bars: fieldBars(cfg.fields), links: fieldLinks(cfg.fields), badges: fieldBadges(cfg.fields), valueMap: fieldValueMap(cfg.fields), kind };
 }
 
 // ---------------------------------------------------------------------------
@@ -866,7 +889,7 @@ async function buildGrouped(
   }
   const total = groups.reduce((a, g) => a + g.rows.length, 0);
   log?.debug(`grouped "${name}" by ${scfg.groupBy}: ${groups.length} group(s), ${total} row(s)`);
-  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields), links: fieldLinks(scfg.fields), badges: fieldBadges(scfg.fields) };
+  return { name, columnsAll: eff.order, hidden: eff.hidden, rows: [], summary: `${total} ${name} · ${groups.length} ${scfg.groupBy}`, grouped: true, groups, bases: fieldBases(scfg.fields), bars: fieldBars(scfg.fields), links: fieldLinks(scfg.fields), badges: fieldBadges(scfg.fields), valueMap: fieldValueMap(scfg.fields) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1229,6 +1252,7 @@ function getHtml(): string {
   td[data-wp] { box-shadow: inset 2px 0 0 #f1c40f; }
   .grp-bar { margin: 10px 2px 6px; }
   .grp-toggle { font-size: 11px; }
+  .collapse-all { font-size: 11px; }
   tr.grphdr td {
     background: var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.13)) !important;
     font-weight: 700; font-size: 12px; cursor: pointer;
@@ -1279,6 +1303,7 @@ function getHtml(): string {
   tbody tr.rowflash td { animation: rowflash 1.6s ease-out; }
 
   .badge { font-size: 11px; padding: 2px 9px; border-radius: 5px; font-weight: 600; display: inline-block; }
+  .vmap { font-weight: 500; }   /* renksiz valueMap metni (yalnız metin değiştirildi) */
   .s-run   { background: rgba(46,204,113,0.18); color: #2ecc71; }
   .s-ready { background: rgba(52,152,219,0.18); color: #3498db; }
   .s-block { background: rgba(231,76,60,0.18);  color: #e74c3c; }
@@ -1575,6 +1600,22 @@ function getHtml(): string {
     for (var k in map) { if (String(k).trim().toLowerCase() === v) return map[k]; }
     return null;
   }
+  // config-driven değer eşlemesi: değer -> {text?, color?}. Önce ham değeri, sonra tırnaksız (shortVal) biçimi dener (enum char* "init" gibi).
+  function matchValueMap(map, val) {
+    if (!map) return null;
+    var v = String(val).trim().toLowerCase();
+    for (var k in map) { if (String(k).trim().toLowerCase() === v) return map[k]; }
+    var sv = String(shortVal(val)).trim().toLowerCase();
+    if (sv !== v) { for (var k2 in map) { if (String(k2).trim().toLowerCase() === sv) return map[k2]; } }
+    return null;
+  }
+  // valueMap girdisini render edilebilir {text, hex} ikilisine çevir (color adı veya #rrggbb -> hex)
+  function valueMapEntry(map, val, fallbackText) {
+    var vm = matchValueMap(map, val);
+    if (!vm) return null;
+    var text = (vm.text != null && vm.text !== '') ? vm.text : fallbackText;
+    return { text: text, hex: badgeHex(vm.color) };
+  }
   function asNum(v){ const m=String(v).match(/-?\\d+/); return m?parseInt(m[0],10):NaN; }
 
   // Erişilemeyen (gdb hata/erişim yok) veya NULL pointer (0x0) -> "-"
@@ -1691,7 +1732,14 @@ function getHtml(): string {
       return h;
     }
     h += '<input class="tbl-filter" type="text" placeholder="Filter — text or PID>=3" value="' + esc(st.filter || '') + '" title="Filter rows by text, or a field test like PID>=3 / state=running (operators > >= < <= = !=); combine several">';
-    if (st.sec.grouped) h += '<button class="btn grp-toggle">' + (st.flat ? '⊞ Tree' : '☰ Flat') + '</button>';
+    if (st.sec.grouped) {
+      h += '<button class="btn grp-toggle">' + (st.flat ? '⊞ Tree' : '☰ Flat') + '</button>';
+      if (!st.flat) {
+        var grps = st.sec.groups || [], col = st.collapsed || [];
+        var allCol = grps.length > 0 && grps.every(function (g) { return col.indexOf(g.key) !== -1; });
+        h += '<button class="btn collapse-all" title="Collapse or expand all groups">' + (allCol ? '⊞ Expand all' : '⊟ Collapse all') + '</button>';
+      }
+    }
     else if (st.changeCount > 0) h += '<button class="btn chg-only' + (st.changedOnly ? ' on' : '') + '" title="Show only changed rows">Δ Changed</button>';
     h += '<span class="grow"></span>';
     h += '<button class="btn view-toggle" title="Show this section as a node graph">◉ Graph</button>';
@@ -1816,6 +1864,7 @@ function getHtml(): string {
     const bars = opts.bars || {};
     const links = opts.links || {};
     const badges = opts.badges || {};
+    const valueMap = opts.valueMap || {};
     const sortCol = opts.sortCol;
     const rk = rowKeyOf(row, columns);
     let h = '<tr' + (ri != null ? ' data-ri="' + ri + '"' : '') + (row['__el__'] ? ' data-el="' + esc(row['__el__']) + '"' : '') + '>';   // data-ri=kaynak satır; data-el=watch ifadesi (kararlı eleman)
@@ -1840,8 +1889,13 @@ function getHtml(): string {
       const clsAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
       const lk = links[c];
       let inner;
+      const vmap = (!isDash(raw)) ? valueMapEntry(valueMap[c], raw, disp) : null;   // config-driven değer eşlemesi (metin + renk); badge'in önünde
       if (lk && raw !== '' && !isDash(raw) && linkHasTarget(lk, raw)) {
-        inner = '<a class="xref" data-sec="' + esc(lk.section) + '" data-match="' + esc(lk.match || '') + '" data-val="' + esc(raw) + '">' + esc(disp) + '</a>';
+        inner = '<a class="xref" data-sec="' + esc(lk.section) + '" data-match="' + esc(lk.match || '') + '" data-val="' + esc(raw) + '">' + esc(vmap ? vmap.text : disp) + '</a>';
+      } else if (vmap) {
+        inner = vmap.hex
+          ? '<span class="badge" style="background:' + vmap.hex + '30;color:' + vmap.hex + '">' + esc(vmap.text) + '</span>'
+          : '<span class="vmap">' + esc(vmap.text) + '</span>';
       } else {
         const bhex = (!isDash(raw)) ? badgeHex(matchBadge(badges[c], raw)) : null;   // config-driven rozet
         inner = bhex
@@ -1907,12 +1961,13 @@ function getHtml(): string {
   function shortVal(v) { var s = String(v == null ? '' : v); var m = s.match(/"([^"]*)"/); return m ? m[1] : s; }
   function stateHex(sc) { return sc === 's-run' ? '#2ecc71' : sc === 's-ready' ? '#3498db' : sc === 's-block' ? '#e74c3c' : sc === 's-wait' ? '#f1c40f' : null; }
   // Düğüm rengi: önce 'state/durum' kolonu, sonra config-driven rozet eşleşmesi
-  function nodeColor(row, cols, badges) {
+  function nodeColor(row, cols, badges, valueMap) {
     for (var i = 0; i < cols.length; i++) {
       var lc = String(cols[i]).toLowerCase();
       if (lc.indexOf('state') !== -1 || lc.indexOf('durum') !== -1) { var h = stateHex(stateClass(row[cols[i]])); if (h) return h; }
     }
     for (var j = 0; j < cols.length; j++) { var bh = badgeHex(matchBadge(badges && badges[cols[j]], row[cols[j]])); if (bh) return bh; }
+    for (var k = 0; k < cols.length; k++) { var vm = matchValueMap(valueMap && valueMap[cols[k]], row[cols[k]]); if (vm && vm.color) { var vh = badgeHex(vm.color); if (vh) return vh; } }   // valueMap rengi -> kart şeridi/minimap noktası
     return null;
   }
   // Sürükle-konum kalıcılık anahtarı: KARARLI satır kimliği (ilk kolon değeri — değişiklik-vurgusuyla aynı),
@@ -2170,7 +2225,8 @@ function getHtml(): string {
     }
     return 'M' + ex + ',' + ey + ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + bx + ',' + by;
   }
-  function nodeSvg(n, badges, bars) {
+  function nodeSvg(n, badges, bars, valueMap) {
+    valueMap = valueMap || {};
     if (n.group) {
       return '<g class="gnode gv-group" data-id="' + esc(n.id) + '" transform="translate(' + n.x + ',' + n.y + ')">' +
         '<rect class="card" width="' + n.w + '" height="' + n.h + '" rx="8"></rect>' +
@@ -2186,8 +2242,9 @@ function getHtml(): string {
       gsv += '<text class="gsub" x="14" y="34">' + esc(cap(n.tsec)) + '</text>';
       return gsv + '</g>';
     }
-    var row = n.row, cols = n.cols, color = nodeColor(row, cols, badges);
-    var title = cols.length ? shortVal(row[cols[0]]) : '';
+    var row = n.row, cols = n.cols, color = nodeColor(row, cols, badges, valueMap);
+    var tvm = cols.length ? valueMapEntry(valueMap[cols[0]], row[cols[0]], shortVal(row[cols[0]])) : null;
+    var title = cols.length ? (tvm ? tvm.text : shortVal(row[cols[0]])) : '';
     var elAttr = row['__el__'] ? ' data-el="' + esc(row['__el__']) + '"' : '';   // #1: sağ tık -> watch ifadesi kopyala
     var s = '<g class="gnode" data-id="' + esc(n.id) + '" data-search="' + esc(n._s || '') + '"' + elAttr + ' transform="translate(' + n.x + ',' + n.y + ')">';
     s += '<rect class="card" width="' + n.w + '" height="' + n.h + '" rx="8"></rect>';
@@ -2199,6 +2256,9 @@ function getHtml(): string {
     var fy = 34;
     cols.slice(1).forEach(function (c) {
       s += '<text class="flab" x="14" y="' + fy + '">' + esc(c) + '</text>';
+      var fvm = valueMapEntry(valueMap[c], row[c], shortVal(row[c]));   // config-driven değer eşlemesi (metin + renk)
+      var fvText = fvm ? fvm.text : shortVal(row[c]);
+      var fvFill = (fvm && fvm.hex) ? ' fill="' + fvm.hex + '"' : '';
       if (bars[c]) {
         var used = toIntVal(row[c]), mxv = toIntVal(row['__bar__' + c]);
         if (used !== null && mxv !== null && mxv > 0) {
@@ -2208,10 +2268,10 @@ function getHtml(): string {
           s += '<rect class="gbarfill" x="' + bx2 + '" y="' + (fy - 8) + '" width="' + (bw * pct).toFixed(1) + '" height="7" rx="3.5" fill="' + bc + '"></rect>';
           s += '<text class="gpct" x="' + (n.w - 12) + '" y="' + (fy - 1) + '" text-anchor="end">' + Math.round(pct * 100) + '%</text>';
         } else {
-          s += '<text class="fval" x="' + (n.w - 12) + '" y="' + fy + '" text-anchor="end">' + esc(shortVal(row[c])) + '</text>';
+          s += '<text class="fval"' + fvFill + ' x="' + (n.w - 12) + '" y="' + fy + '" text-anchor="end">' + esc(fvText) + '</text>';
         }
       } else {
-        s += '<text class="fval" x="' + (n.w - 12) + '" y="' + fy + '" text-anchor="end">' + esc(shortVal(row[c])) + '</text>';
+        s += '<text class="fval"' + fvFill + ' x="' + (n.w - 12) + '" y="' + fy + '" text-anchor="end">' + esc(fvText) + '</text>';
       }
       fy += 16;
     });
@@ -2221,7 +2281,7 @@ function getHtml(): string {
     var st = secState[name], body = bodyEl(name); if (!st || !st.sec || !body) return;
     var idx = idxOf(name);
     var model = graphModel(st);
-    var badges = st.sec.badges || {}, bars = st.sec.bars || {};
+    var badges = st.sec.badges || {}, bars = st.sec.bars || {}, valueMap = st.sec.valueMap || {};
     var tbar = toolbarHtml(st);
     var summary = '<div class="summary">' + esc(st.sec.summary || '') + '</div>';
     if (!model.nodes.length) { body.innerHTML = summary + tbar + '<div class="gv-empty">Nothing to graph (list is empty).</div>'; return; }
@@ -2231,8 +2291,8 @@ function getHtml(): string {
     var eg = ''; model.edges.forEach(function (ed) { var a = model.byId[ed.from], b = model.byId[ed.to]; if (!a || !b) return; eg += '<path class="gedge ' + ed.type + '" data-f="' + esc(ed.from) + '" data-t="' + esc(ed.to) + '" d="' + edgePath(a, b, ed.type) + '" marker-end="url(#gar' + idx + ')"></path>'; });
     var ng = '', mini = '';
     model.nodes.forEach(function (n) {
-      ng += nodeSvg(n, badges, bars);
-      var mcol = n.ghost ? '#b07cc6' : n.group ? '#5a5a5a' : (nodeColor(n.row, n.cols, badges) || '#7d8590');
+      ng += nodeSvg(n, badges, bars, valueMap);
+      var mcol = n.ghost ? '#b07cc6' : n.group ? '#5a5a5a' : (nodeColor(n.row, n.cols, badges, valueMap) || '#7d8590');
       mini += '<rect class="mnode" x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" fill="' + mcol + '"></rect>';
     });
     var total = st.sec.grouped ? (st.sec.groups || []).reduce(function (a, g) { return a + (g.rows || []).length; }, 0) : (st.sec.rows || []).length;
@@ -2503,7 +2563,7 @@ function getHtml(): string {
     const allRows = grouped ? st.sec.groups.reduce((a, g) => a.concat(g.rows), []) : st.sec.rows;
     const numCols = numericCols(cols, allRows);
     st.numCols = numCols;   // ▦ Columns menüsü per-kolon base düğmesi için kullanır
-    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {}, links: st.sec.links || {}, badges: st.sec.badges || {}, sortCol: st.sortCol };
+    const opts = { numCols: numCols, colBase: st.colBase || {}, bars: st.sec.bars || {}, links: st.sec.links || {}, badges: st.sec.badges || {}, valueMap: st.sec.valueMap || {}, sortCol: st.sortCol };
     const summary = '<div class="summary">' + esc(st.sec.summary) + '</div>';
     const bar = toolbarHtml(st);
     let table;
@@ -2700,6 +2760,18 @@ function getHtml(): string {
     if (e.target.closest('.grp-toggle')) {
       const name = paneName(e); const st = secState[name];
       if (st) { st.flat = !st.flat; paint(name); }
+      return;
+    }
+    // grup: tümünü kapat / tümünü aç (hepsi kapalıysa aç, değilse hepsini kapat)
+    if (e.target.closest('.collapse-all')) {
+      const name = paneName(e); const st = secState[name];
+      if (st && st.sec && st.sec.groups) {
+        st.collapsed = st.collapsed || [];
+        const keys = st.sec.groups.map(function (g) { return g.key; });
+        const allCol = keys.length > 0 && keys.every(function (k) { return st.collapsed.indexOf(k) !== -1; });
+        st.collapsed = allCol ? [] : keys.slice();
+        paint(name);
+      }
       return;
     }
     // araç çubuğu: changed-only / sayı tabanı / kopya
@@ -3141,6 +3213,7 @@ function getHtml(): string {
         if (m.bars) st.sec.bars = m.bars;
         if (m.links) st.sec.links = m.links;
         if (m.badges) st.sec.badges = m.badges;
+        if (m.valueMap) st.sec.valueMap = m.valueMap;
         if (m.bases) { st.sec.bases = m.bases; st.colBase = st.colBase || {}; for (const k in m.bases) st.colBase[k] = m.bases[k]; }
         paint(m.section); buildColsMenu(m.section);
       }

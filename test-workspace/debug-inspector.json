@@ -27,7 +27,7 @@
     ]
   },
 
-  "//mutexes": "düz dizi (g_mutexes). KOŞULLU ALANLAR ('when' ile variant): kilitliyse 'Owner' (sahip thread'e LİNK), kilitli değilse 'Waiting' gösterilir; öbürü boş kalır. 'Owner' link -> 'threads' (ID ile eşleşir, tıklayınca grubu açıp satırı vurgular).",
+  "//mutexes": "düz dizi (g_mutexes). KOŞULLU ALANLAR ('when' ile variant): kilitliyse 'Owner' (sahip thread'e LİNK), kilitli değilse 'Waiting' gösterilir; öbürü boş kalır. 'Owner' link -> 'threads' (ID ile eşleşir, tıklayınca grubu açıp satırı vurgular). 'Locked' = valueMap: tamsayı 0/1 -> 'free'/'HELD' metni + renk (#rrggbb). timers 'Active' de aynı (0/1 -> idle/armed, renk adı). valueMap badge'in metin değiştiren üst kümesidir; tablo hücresinde ve graph kartında uygulanır.",
   "mutexes": {
     "mode": "array",
     "root": "g_mutexes",
@@ -36,7 +36,7 @@
     "fields": [
       { "label": "ID",      "expr": "id" },
       { "label": "Name",    "expr": "name" },
-      { "label": "Locked",  "expr": "locked", "editable": true },
+      { "label": "Locked",  "expr": "locked", "editable": true, "valueMap": { "0": { "text": "free", "color": "#2ecc71" }, "1": { "text": "HELD", "color": "#e74c3c" } } },
       { "label": "Owner",   "expr": "owner",   "when": "locked",            "link": { "section": "threads", "match": "ID" } },
       { "label": "Waiting", "expr": "waiters", "when": "${expr}.locked == 0" }
     ]
@@ -66,7 +66,7 @@
       { "label": "Name",    "expr": "name" },
       { "label": "Period",  "expr": "period" },
       { "label": "Elapsed", "expr": "elapsed" },
-      { "label": "Active",  "expr": "active" }
+      { "label": "Active",  "expr": "active", "valueMap": { "0": { "text": "idle", "color": "gray" }, "1": { "text": "armed", "color": "green" } } }
     ]
   },
 

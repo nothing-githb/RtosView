@@ -2,6 +2,20 @@
 
 All notable changes to the **Debug Inspector** extension are documented here.
 
+## [0.60.0] - 2026-06-12
+
+### Added
+- **Value mapping (`valueMap`).** A new per-field config that renders a raw value as a
+  custom **string** and **colour**. For example, map the integer `2` to the label `XXX`
+  in `#ff0000`, or `0`/`1` to `free`/`HELD` in green/red. Give a plain string to change
+  just the text, or `{ "text": "...", "color": "..." }` to change both (`color` is a name
+  like `green` or a `#rrggbb` hex). It applies in both the table cell and the graph card
+  (where the mapped colour also tints the card's accent stripe). This is the text-changing
+  superset of `badge`, which only colours.
+- **Collapse all / Expand all for grouped tables.** Grouped (tree) tables now have a
+  one-click **Collapse all** control in the toolbar that folds every group at once; click
+  again to expand them all. The button label reflects the current state.
+
 ## [0.59.0] - 2026-06-12
 
 ### Changed
